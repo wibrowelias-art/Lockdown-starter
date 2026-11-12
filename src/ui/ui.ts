@@ -42,6 +42,7 @@ export interface Settings {
   invertY: boolean;
   sound: boolean;
   lowQuality: boolean;
+  guidance: 'full' | 'minimal' | 'off';
 }
 
 type Thread = 'zoe' | 'mom';
@@ -275,6 +276,7 @@ export interface ChecklistItem {
   missed?: boolean;
   optional?: boolean;
   group?: string;
+  current?: boolean;
   testid?: string;
 }
 
@@ -302,6 +304,12 @@ export class UI {
   private joy = el('div', 'joy', '<div class="knob"></div>');
   private fadeEl = el('div', 'fade');
   private titleCard = el('div', 'titlecard');
+  private gCard = el('div', 'guide-card');
+  private gIcon = el('div', 'guide-icon');
+  private gPointer = el('div', 'guide-pointer', '<span class="chev"></span>');
+  private gKey = el('div', 'keyhint');
+  private gRing = el('div', 'hold-ring', '<svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" class="bg"/><circle cx="18" cy="18" r="15" class="fg"/></svg>');
+  private glowEl: HTMLElement | null = null;
   private screen = el('div', 'screen');
   private pauseEl = el('div', 'pause');
   private optionsEl = el('div', 'options');
@@ -351,6 +359,10 @@ export class UI {
       [this.holdBox, 'holdmeter'],
       [this.titleCard, 'titlecard'],
       [this.pauseEl, 'pause'],
+      [this.gCard, 'guide-card'],
+      [this.gIcon, 'guide-icon'],
+      [this.gPointer, 'guide-pointer'],
+      [this.gKey, 'keyhint'],
     ] as [HTMLElement, string][])
       e.dataset.testid = id;
     this.actions.append(this.crouchBtn, this.holdBtn, this.useBtn, this.phoneBtn);
@@ -369,6 +381,11 @@ export class UI {
     press(this.holdBtn, (d) => this.onHold?.(d));
     press(this.useBtn, (d) => this.onUseHold?.(d));
     this.hud.append(
+      this.gIcon,
+      this.gPointer,
+      this.gCard,
+      this.gKey,
+      this.gRing,
       this.cross,
       this.promptEl,
       this.hintEl,
@@ -398,6 +415,96 @@ export class UI {
     this.holdMeter(null);
     this.breathe(null);
     this.pause(false);
+    this.guideCard(null);
+    this.guideIcon(null);
+    this.guidePointer(null);
+    this.holdRing(null);
+    this.gKey.style.display = 'none';
+  }
+
+  // ---------- guidance ----------
+
+  get phoneBadge(): boolean {
+    return this.phoneBtn.classList.contains('badge') && this.phoneBtn.style.display !== 'none';
+  }
+
+  hasTestId(id: string): boolean {
+    const e = this.root.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+    return !!e && e.offsetParent !== null;
+  }
+
+  guideCard(c: { text: string; key: string | null; distance: number | null; dim: boolean } | null): void {
+    if (!c) {
+      this.gCard.style.display = 'none';
+      return;
+    }
+    this.gCard.style.display = '';
+    this.gCard.classList.toggle('dim', c.dim);
+    this.gCard.innerHTML = `${c.key ? `<span class="kc">${esc(c.key)}</span>` : '<span class="dot"></span>'}<span class="gt">${esc(c.text)}</span>${c.distance !== null ? `<span class="gd">${c.distance.toFixed(1)} m</span>` : ''}`;
+  }
+
+  guideIcon(i: { x: number; y: number; label: string; opacity: number } | null): void {
+    if (!i) {
+      this.gIcon.style.display = 'none';
+      return;
+    }
+    this.gIcon.style.display = '';
+    this.gIcon.style.transform = `translate(${i.x}px, ${i.y}px) translate(-50%, -100%)`;
+    this.gIcon.style.opacity = String(i.opacity);
+    if (this.gIcon.textContent !== i.label) this.gIcon.innerHTML = `<span class="kc">${esc(i.label)}</span>`;
+  }
+
+  /** Edge chevron. angle: radians in screen space, 0 = right, +pi/2 = up. */
+  guidePointer(p: { angle: number; opacity: number; ping: boolean } | null): void {
+    if (!p) {
+      this.gPointer.style.display = 'none';
+      return;
+    }
+    const r = this.root.getBoundingClientRect();
+    const cx = r.width / 2;
+    const cy = r.height / 2;
+    const rx = cx - 46;
+    const ry = cy - 70;
+    const x = cx + Math.cos(p.angle) * rx;
+    const y = cy - Math.sin(p.angle) * ry;
+    this.gPointer.style.display = '';
+    this.gPointer.style.opacity = String(p.opacity);
+    this.gPointer.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%) rotate(${-p.angle}rad)`;
+    this.gPointer.classList.toggle('ping', p.ping);
+    this.gPointer.dataset.angle = p.angle.toFixed(3);
+  }
+
+  holdRing(progress: number | null): void {
+    if (progress === null) {
+      this.gRing.style.display = 'none';
+      return;
+    }
+    this.gRing.style.display = '';
+    (this.gRing.querySelector('.fg') as SVGCircleElement).style.strokeDashoffset = String(94.2 * (1 - progress));
+  }
+
+  guideGlow(testid: string | null, strong: boolean): void {
+    const next = testid ? this.root.querySelector<HTMLElement>(`[data-testid="${testid}"]`) : null;
+    if (next !== this.glowEl) {
+      this.glowEl?.classList.remove('guide-glow', 'strong');
+      this.glowEl = next;
+    }
+    next?.classList.add('guide-glow');
+    next?.classList.toggle('strong', strong);
+  }
+
+  keyHint(text: string): void {
+    const [key, ...rest] = text.split('  ');
+    this.gKey.innerHTML = `<span class="kc big">${esc(key)}</span><span>${esc(rest.join(' '))}</span>`;
+    this.gKey.style.display = '';
+    this.gKey.classList.remove('out');
+    this.subTimers.push(this.clock.after(4.5, () => this.gKey.classList.add('out')));
+    this.subTimers.push(this.clock.after(5.3, () => (this.gKey.style.display = 'none')));
+  }
+
+  /** During hold-still beats only the stillness meter shows. */
+  setHolding(v: boolean): void {
+    this.root.classList.toggle('holding', v);
   }
 
   // ---------- options ----------
@@ -409,13 +516,19 @@ export class UI {
       <label>Mouse sensitivity <input type="range" min="0.3" max="2.5" step="0.1" value="${s.sensitivity}" data-k="sensitivity"></label>
       <label><input type="checkbox" ${s.invertY ? 'checked' : ''} data-k="invertY"> Invert Y</label>
       <label><input type="checkbox" ${s.sound ? 'checked' : ''} data-k="sound" data-testid="opt-sound"> Sound</label>
-      <label><input type="checkbox" ${s.lowQuality ? 'checked' : ''} data-k="lowQuality" data-testid="opt-lowq"> Low quality (no outlines or bloom, for phones)</label>
+      <label><input type="checkbox" ${s.lowQuality ? 'checked' : ''} data-k="lowQuality" data-testid="opt-lowq"> Low quality (for phones)</label>
+      <label>Guidance <select data-k="guidance" data-testid="opt-guidance">
+        <option value="full" ${s.guidance === 'full' ? 'selected' : ''}>Full: card, outline, pointers</option>
+        <option value="minimal" ${s.guidance === 'minimal' ? 'selected' : ''}>Minimal: task card only</option>
+        <option value="off" ${s.guidance === 'off' ? 'selected' : ''}>Off</option>
+      </select></label>
       <button class="big" data-testid="options-close">Done</button>
     </div>`;
-    this.optionsEl.querySelectorAll('input').forEach((inp) =>
-      inp.addEventListener('input', () => {
+    this.optionsEl.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select').forEach((inp) =>
+      inp.addEventListener(inp.tagName === 'SELECT' ? 'change' : 'input', () => {
         const k = inp.dataset.k as keyof Settings;
-        (this.settings as unknown as Record<string, unknown>)[k] = inp.type === 'checkbox' ? inp.checked : Number(inp.value);
+        const val = inp instanceof HTMLInputElement ? (inp.type === 'checkbox' ? inp.checked : Number(inp.value)) : inp.value;
+        (this.settings as unknown as Record<string, unknown>)[k] = val;
         this.onSettings?.(this.settings);
       }),
     );
@@ -557,7 +670,8 @@ export class UI {
         group = i.group;
         html += `<div class="cl-group">${esc(group)}</div>`;
       }
-      html += `<div class="o ${i.done ? 'done' : ''} ${i.missed ? 'missed' : ''} ${i.optional ? 'opt' : ''}" ${i.testid ? `data-testid="${i.testid}"` : ''}><span class="box"></span><span>${esc(i.label)}</span></div>`;
+      const mark = i.done ? '\u2713' : i.missed ? '\u2715' : i.current ? '\u25B6' : '';
+      html += `<div class="o ${i.done ? 'done' : ''} ${i.missed ? 'missed' : ''} ${i.optional ? 'opt' : ''} ${i.current ? 'current' : ''}" ${i.testid ? `data-testid="${i.testid}"` : ''}><span class="box">${mark}</span><span>${esc(i.label)}</span></div>`;
     }
     this.list.innerHTML = html;
   }
@@ -584,9 +698,12 @@ export class UI {
     this.promptEl.style.display = text ? '' : 'none';
   }
 
-  hint(text: string | null): void {
+  /** Legacy hints: shown only when guidance is off (the task card replaces them), or when forced. */
+  guidanceOff = false;
+  hint(text: string | null, force = false): void {
+    const show = !!text && (force || this.guidanceOff);
     this.hintEl.textContent = text ?? '';
-    this.hintEl.style.display = text ? '' : 'none';
+    this.hintEl.style.display = show ? '' : 'none';
   }
 
   choices<T>(opts: Option<T>[], pick: (v: T) => void, title?: string): void {

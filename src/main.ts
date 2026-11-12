@@ -56,6 +56,25 @@ async function start(): Promise<void> {
     lookAt: (x: number, y: number, z: number) => game.lookAtPoint(x, y, z),
     holdUse: (down: boolean) => (game.input.holdingUse = down),
     holdingSheet: () => game.flags.holdingSheet,
+    guidance: () => ({ ...game.guidance.state }),
+    setGuidance: (m: 'full' | 'minimal' | 'off') => {
+      game.settings.guidance = m;
+      game.applySettings(game.settings);
+    },
+    navTo: (x: number, z: number, within = 0.15) => game.navTo(x, z, within),
+    danger: () => game.flags.danger,
+    setYaw: (y: number) => {
+      game.player.yaw = y;
+      game.player.pitch = 0;
+    },
+    yawTo: (id: string) => {
+      const p = game.targetPos(id);
+      return p ? Math.atan2(-(p.x - game.player.x), -(p.z - game.player.z)) : null;
+    },
+    navToTarget: (id: string, within = 1.0) => {
+      const p = game.targetPos(id);
+      return p ? game.navTo(p.x, p.z, within) : Promise.resolve(false);
+    },
     theoFollowing: () => game.flags.theoFollowing || game.store.state.tasks.theoDown,
     people: () => Object.fromEntries([...game.world.people].map(([n, p]) => [n, [+p.root.position.x.toFixed(2), +p.root.position.z.toFixed(2), p.pose]])),
   };

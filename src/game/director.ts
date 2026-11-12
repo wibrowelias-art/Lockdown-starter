@@ -611,10 +611,12 @@ export async function waitingScene(g: Game, s: Script): Promise<void> {
   theo.setPose('crouch');
   await line(g, s, 'teacher', 'Outside. Not up here. Stay down.', { whisper: true });
   theo.setPose('floor');
+  g.flags.stayDownWindow = true;
   g.ui.hint('Stay down.');
   const before = g.player.travelled.stand + g.player.travelled.crouch;
   const stood = await s.until(() => g.player.stance === 'stand' || g.player.travelled.stand + g.player.travelled.crouch - before > 0.4, 8);
   g.ui.hint(null);
+  g.flags.stayDownWindow = false;
   if (stood) {
     g.dispatch({ type: 'NOISE', source: 'stoodUp' });
     await line(g, s, 'teacher', 'Down!', { whisper: true });

@@ -25,6 +25,13 @@ declare global {
       holdUse: (down: boolean) => void;
       holdingSheet: () => boolean;
       theoFollowing: () => boolean;
+      guidance: () => Record<string, any>;
+      setGuidance: (m: 'full' | 'minimal' | 'off') => void;
+      navTo: (x: number, z: number, within?: number) => Promise<boolean>;
+      navToTarget: (id: string, within?: number) => Promise<boolean>;
+      danger: () => boolean;
+      setYaw: (y: number) => void;
+      yawTo: (id: string) => number | null;
     };
   }
 }
@@ -111,6 +118,10 @@ export async function holdSpaceWhile(page: Page, testid: string, timeout = 60_00
 }
 
 /** Breathe with Theo: closed-loop on the guide ring (hold while it grows). */
+export async function guidance(page: Page): Promise<Record<string, any>> {
+  return page.evaluate(() => window.__lockdown.guidance());
+}
+
 export async function breatheWithTheo(page: Page): Promise<void> {
   await page.waitForFunction(() => window.__lockdown.breath().active, null, { timeout: 90_000 });
   const speed = await page.evaluate(() => window.__lockdown.getSpeed());

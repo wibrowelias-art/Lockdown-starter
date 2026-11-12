@@ -33,7 +33,7 @@ test('ending 1 - everyone went home: every task, all six phases', async ({ page 
   await page.evaluate(() => window.__lockdown.aim('pa'));
   await expect.poll(() => task(page, 'lookPA')).toBe(true);
   await shot(page, '03-code-pa');
-  await expect(page.getByText(/DROP/)).toBeVisible({ timeout: 60_000 });
+  await page.waitForFunction(() => window.__lockdown.guidance().task === 'dropDown', null, { timeout: 60_000 });
   await page.keyboard.press('c');
   await expect.poll(() => task(page, 'dropDown')).toBe(true);
 
@@ -77,9 +77,9 @@ test('ending 1 - everyone went home: every task, all six phases', async ({ page 
     }
     if (r === 1) {
       // footsteps pass while the screen is lit: cover it until they're gone, then reply
-      await expect(page.getByText(/cover the glow/)).toBeVisible({ timeout: 60_000 });
+      await page.waitForFunction(() => window.__lockdown.danger(), null, { timeout: 60_000 });
       await page.keyboard.down('Space');
-      await expect(page.getByText(/cover the glow/)).toBeHidden({ timeout: 60_000 });
+      await page.waitForFunction(() => !window.__lockdown.danger(), null, { timeout: 60_000 });
       await page.keyboard.up('Space');
     }
     await expect(page.getByTestId('reply-calm')).toBeVisible({ timeout: 60_000 });
@@ -101,7 +101,7 @@ test('ending 1 - everyone went home: every task, all six phases', async ({ page 
   await shot(page, '07-waiting-hold-still');
   await breatheWithTheo(page);
   await expect.poll(() => task(page, 'breatheTheo'), { timeout: 30_000 }).toBe(true);
-  await expect(page.getByText(/Read it over her shoulder/)).toBeVisible({ timeout: 60_000 });
+  await page.waitForFunction(() => window.__lockdown.guidance().task === 'schoolAlert', null, { timeout: 60_000 });
   await clickTarget(page, 'alert');
   await expect.poll(() => task(page, 'schoolAlert')).toBe(true);
   await holdSpaceWhile(page, 'holdmeter');

@@ -4,7 +4,7 @@ import { type Chair, type Collider, ROOM } from './world';
 export type Stance = 'seated' | 'stand' | 'crouch';
 
 const EYE: Record<Stance, number> = { seated: 1.12, stand: 1.62, crouch: 0.78 };
-export const SPEED = { stand: 1.45, crouch: 0.75, hurry: 2.8 };
+export const SPEED = { stand: 1.45, crouch: 0.95, hurry: 2.8 };
 export const STEP_LENGTH = 0.7;
 
 export class Player {

@@ -91,7 +91,7 @@ export const HUDDLE: Record<string, [number, number, number]> = {
   theo: [3.75, -3.4, -0.3],
 };
 /** Where Noah ends up if Ms. Okafor has to pull him over. */
-export const NOAH_WALL_SPOT = { x: 0.95, z: -3.0 };
+export const NOAH_WALL_SPOT = { x: 0.95, z: -3.25 };
 
 export interface Backpack {
   id: string;

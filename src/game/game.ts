@@ -22,8 +22,9 @@ import { Input } from './input';
 import type { Person, Pose } from './people';
 import { Player } from './player';
 import { Renderer } from './render';
+import { GUIDE_LAYER, Guidance } from './guidance';
 import { outline, toon } from './toon';
-import { AISLE_X, DOOR, HUDDLE, NOAH_WALL_SPOT, PA_POS, PLAYER_DESK, SEAT, SWITCH_POS, World, inDoorWallZone } from './world';
+import { AISLE_X, DOOR, HUDDLE, NOAH_WALL_SPOT, PA_POS, PLAYER_DESK, ROOM, SEAT, SWITCH_POS, World, inDoorWallZone } from './world';
 
 interface Interactable {
   id: string;
@@ -127,6 +128,7 @@ export class Game {
     gazeBackpack: 0,
     lockdownTimer: 0,
     lockdownStart: 0,
+    stayDownWindow: false,
   };
   breath = { active: false, holding: false, guide: 0, you: 0, sync: 0, cycles: 0, t: 0 };
   hold: { active: boolean; t: number; dur: number; bad: number; ok: boolean; real?: number } = { active: false, t: 0, dur: 0, bad: 0, ok: true };
@@ -139,6 +141,10 @@ export class Game {
   private last = performance.now();
   private flashlight = new THREE.SpotLight(0xe6eeff, 0, 14, 0.4, 0.6, 1.2);
   private raisedHands = new THREE.Group();
+  guidance: Guidance;
+  /** a floor ring at Noah's spot on the door wall: the guidance target for "get to the wall" */
+  wallMarker = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.02, 32), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+  phoneHasBuzzed = false;
   frames = 0;
   fps = 0;
   private fpsAcc = { t: 0, n: 0 };
@@ -161,6 +167,11 @@ export class Game {
     this.flashlight.target.position.set(DOOR.x - 0.5, 0.8, 0);
     this.world.scene.add(this.flashlight, this.flashlight.target);
     this.buildRaisedHands();
+    this.wallMarker.position.set(NOAH_WALL_SPOT.x, 0.012, NOAH_WALL_SPOT.z);
+    this.wallMarker.raycast = () => {};
+    this.world.scene.add(this.wallMarker);
+    this.camera.layers.enable(GUIDE_LAYER);
+    this.guidance = new Guidance(this);
 
     this.input = new Input(
       canvas,
@@ -175,6 +186,7 @@ export class Game {
     );
     this.ui = new UI(host, this.clock, this.input, this.settings);
     this.ui.onSkip = () => this.skip();
+    this.guidance.setMode(this.settings.guidance);
     this.ui.onExit = () => this.dispatch({ type: 'EXIT' });
     this.ui.onSettings = (s) => this.applySettings(s);
     this.ui.onResume = () => this.resume();
@@ -221,7 +233,7 @@ export class Game {
 
   private loadSettings(): Settings {
     const coarse = !!window.matchMedia?.('(pointer: coarse)').matches;
-    const d: Settings = { sensitivity: 1, invertY: false, sound: true, lowQuality: coarse };
+    const d: Settings = { sensitivity: 1, invertY: false, sound: true, lowQuality: coarse, guidance: 'full' };
     try {
       return { ...d, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
     } catch {
@@ -235,6 +247,8 @@ export class Game {
     this.input.invertY = s.invertY;
     this.audio.setMuted(!s.sound);
     this.renderer.setQuality(!s.lowQuality);
+    this.guidance?.setMode(s.guidance);
+    this.ui.guidanceOff = s.guidance === 'off';
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
     } catch {
@@ -313,6 +327,7 @@ export class Game {
       missed: st.missed.includes(t),
       optional: t === 'textMom' || t === 'testQuestion',
       group: st.scene === 'lockdown' ? LOCKDOWN_GROUPS[t] : undefined,
+      current: this.guidance?.state.task === t && this.guidance.mode !== 'off',
       testid: `task-${t}`,
     }));
     const timer = st.scene === 'lockdown' && this.flags.control ? 1 - (this.clock.time - this.flags.lockdownStart) / 75 : undefined;
@@ -454,6 +469,7 @@ export class Game {
       paWindow: false,
       dropWindow: false,
       gazeBackpack: 0,
+      stayDownWindow: false,
     };
     this.ui.pause(false);
     this.breath = { active: false, holding: false, guide: 0, you: 0, sync: 0, cycles: 0, t: 0 };
@@ -462,6 +478,8 @@ export class Game {
     this.player.canMove = false;
     this.raisedHands.visible = false;
     this.panic = 0;
+    this.phoneHasBuzzed = false;
+    this.guidance?.reset();
     this.audio.ringtone(null);
   }
 
@@ -720,6 +738,7 @@ export class Game {
   }
 
   phoneBuzz([from, text]: string[]): void {
+    this.phoneHasBuzzed = true;
     this.audio.phoneBuzz();
     this.ui.phone.notify(from, text);
     this.ui.phone.addMsg('mom', text, { silent: true, thread: 'mom' });
@@ -830,7 +849,7 @@ export class Game {
   /** A hold-still beat: hold Space, keep the mouse and feet still. Resolves passed/failed. */
   async holdStill(s: Script, dur: number, label: string): Promise<boolean> {
     this.hold = { active: true, t: 0, dur, bad: 0, ok: true };
-    this.ui.hint(this.touch ? 'HOLD the Hold button. Don’t move.' : 'Hold Space. Don’t move the mouse.');
+    this.ui.hint(this.touch ? 'Hold the Hold button. Don\u2019t move.' : 'Hold Space. Don\u2019t move.', true);
     await s.until(() => !this.hold.active, dur + 2);
     this.ui.hint(null);
     this.ui.holdMeter(null);
@@ -963,7 +982,7 @@ export class Game {
         return;
       }
       case 'walkOut': {
-        this.ui.hint(this.touch ? 'Raise your hands: hold the Hold button' : 'Raise your hands: hold Space');
+        this.ui.hint(this.touch ? 'Raise your hands: hold the Hold button' : 'Raise your hands: hold Space', true);
         this.ui.setMovement(false, this.touch);
         const ok = await s.until(() => this.holdingStill, 12);
         this.ui.hint(null);
@@ -1245,6 +1264,12 @@ export class Game {
       this.updateTasks(dt);
     }
     this.updateHover();
+    this.player.applyTo(this.camera);
+    this.camera.updateMatrixWorld();
+    const prevTask = this.guidance.state.task;
+    this.guidance.update(dt, realDt);
+    if (prevTask !== this.guidance.state.task) this.updateChecklist();
+    this.ui.setHolding(this.hold.active);
     this.updatePanic(realDt);
 
     this.player.applyTo(this.camera);
@@ -1369,6 +1394,12 @@ export class Game {
         return new THREE.Vector3(-4.5, 1.6, 0.1);
       case 'board':
         return new THREE.Vector3(-1.5, 1.6, -4.5);
+      case 'wallSpot':
+        return new THREE.Vector3(NOAH_WALL_SPOT.x, 0.3, NOAH_WALL_SPOT.z);
+      case 'teacher':
+        return wp(w.teacher.head);
+      case 'sheet':
+        return wp(w.sheetMesh);
     }
     if (id.startsWith('pack:')) {
       const b = w.backpacks.find((x) => x.id === id.slice(5));
@@ -1410,6 +1441,67 @@ export class Game {
       };
       check();
     });
+  }
+
+  /** Grid A* over the room (test/debug helper): walk to within `within` m of (x, z). */
+  async navTo(x: number, z: number, within = 0.15): Promise<boolean> {
+    const cell = 0.2;
+    const nx = Math.round((ROOM.maxX - ROOM.minX) / cell);
+    const nz = Math.round((ROOM.maxZ - ROOM.minZ) / cell);
+    const r = this.player.radius + 0.04;
+    const free = (i: number, j: number) => {
+      if (i < 0 || j < 0 || i >= nx || j >= nz) return false;
+      const px = ROOM.minX + (i + 0.5) * cell;
+      const pz = ROOM.minZ + (j + 0.5) * cell;
+      if (px < ROOM.minX + r || px > ROOM.maxX - r || pz < ROOM.minZ + r || pz > ROOM.maxZ - r) return false;
+      for (const c of this.world.colliders) if (px > c.minX - r && px < c.maxX + r && pz > c.minZ - r && pz < c.maxZ + r) return false;
+      return true;
+    };
+    const toCell = (px: number, pz: number): [number, number] => [Math.floor((px - ROOM.minX) / cell), Math.floor((pz - ROOM.minZ) / cell)];
+    const center = (i: number, j: number): [number, number] => [ROOM.minX + (i + 0.5) * cell, ROOM.minZ + (j + 0.5) * cell];
+    let [si, sj] = toCell(this.player.x, this.player.z);
+    if (!free(si, sj)) {
+      let best: [number, number] | null = null;
+      for (let d = 1; d < 4 && !best; d++) for (let di = -d; di <= d; di++) for (let dj = -d; dj <= d; dj++) if (!best && free(si + di, sj + dj)) best = [si + di, sj + dj];
+      if (best) [si, sj] = best;
+    }
+    const goal = (i: number, j: number) => {
+      const [cx, cz] = center(i, j);
+      return Math.hypot(cx - x, cz - z) <= Math.max(within, cell * 0.75);
+    };
+    const key = (i: number, j: number) => i * 1000 + j;
+    const open: [number, number, number][] = [[si, sj, 0]];
+    const g = new Map<number, number>([[key(si, sj), 0]]);
+    const from = new Map<number, number>();
+    let end = -1;
+    let guard = 0;
+    while (open.length && guard++ < 20000) {
+      open.sort((a, b) => a[2] - b[2]);
+      const [i, j] = open.shift()!;
+      if (goal(i, j)) {
+        end = key(i, j);
+        break;
+      }
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const ni = i + di;
+        const nj = j + dj;
+        if (!free(ni, nj) || (di && dj && (!free(i + di, j) || !free(i, j + dj)))) continue;
+        const ng = g.get(key(i, j))! + Math.hypot(di, dj);
+        if (ng < (g.get(key(ni, nj)) ?? Infinity)) {
+          g.set(key(ni, nj), ng);
+          from.set(key(ni, nj), key(i, j));
+          const [cx, cz] = center(ni, nj);
+          open.push([ni, nj, ng + Math.max(0, Math.hypot(cx - x, cz - z) - within) / cell]);
+        }
+      }
+    }
+    if (end < 0) return false;
+    const path: [number, number][] = [];
+    for (let k: number | undefined = end; k !== undefined; k = from.get(k)) path.unshift(center(Math.floor(k / 1000), k % 1000));
+    // keep only turning points
+    const pts = path.filter((_, i) => i === path.length - 1 || i % 3 === 2);
+    for (const [px, pz] of pts) await this.walkTo(px, pz);
+    return Math.hypot(this.player.x - x, this.player.z - z) <= within + 0.3;
   }
 
   get loud(): boolean {
