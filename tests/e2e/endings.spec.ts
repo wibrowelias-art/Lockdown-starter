@@ -267,10 +267,12 @@ test('exit and skip are always available; exit shows guidance and returns to sta
   await page.getByTestId('restart').click();
   await page.getByTestId('options-btn').click();
   await expect(page.getByTestId('options')).toBeVisible();
-  await page.getByTestId('opt-lowq').uncheck();
-  expect(await page.evaluate(() => window.__lockdown.quality())).toBe('high');
-  await page.getByTestId('opt-lowq').check();
-  expect(await page.evaluate(() => window.__lockdown.quality())).toBe('low');
+  for (const q of ['medium', 'high', 'ultra', 'low']) {
+    await page.getByTestId('opt-quality').selectOption(q);
+    expect(await page.evaluate(() => window.__lockdown.quality())).toBe(q);
+  }
+  await page.getByTestId('opt-lens').check();
+  await page.getByTestId('opt-lens').uncheck();
   report('exit-skip-options', { errors: run.errors });
   expect(run.errors).toEqual([]);
 });

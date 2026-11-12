@@ -111,11 +111,11 @@ test('guidance leads the player through all 24 tasks', async ({ page }) => {
           break;
         }
         if (g.iconVisible) await snap('icon', 'world-icon-wall');
-        await page.evaluate(() => window.__lockdown.navTo(0.95, -3.25, 0.12));
+        await page.evaluate(() => window.__lockdown.navTo(0.4, -3.1, 0.12));
         break;
       case 'lockAndLights':
         await page.waitForTimeout(300);
-        await page.evaluate(() => window.__lockdown.navTo(0.95, -3.25, 0.12));
+        await page.evaluate(() => window.__lockdown.navTo(0.4, -3.1, 0.12));
         break;
       case 'silencePhone':
         if (g.uiGlow) await snap('ui', 'ui-glow-phone');
@@ -151,7 +151,7 @@ test('guidance leads the player through all 24 tasks', async ({ page }) => {
         if (target === 'theo') {
           await page.evaluate(() => window.__lockdown.navToTarget('theo', 1.0));
           await clickUntil(page, 'theo', () => page.evaluate(() => window.__lockdown.theoFollowing()));
-        } else await page.evaluate(() => window.__lockdown.navTo(0.95, -3.25, 0.12));
+        } else await page.evaluate(() => window.__lockdown.navTo(0.4, -3.1, 0.12));
         break;
       case 'blinds':
         await page.evaluate(() => window.__lockdown.navTo(-3.9, 0.6, 0.3));

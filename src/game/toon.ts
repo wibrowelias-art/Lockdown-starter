@@ -1,62 +1,56 @@
 import * as THREE from 'three';
+import type { PBRSet } from './materials';
 
-/** Layer used for inverted-hull outlines, so the edge pass's normal render skips them. */
+// v3: everything is physically based. The cartoon look (toon ramp + ink outlines)
+// lives on in the v2 commit; these helpers keep the old call sites working.
+
+/** Layer kept for compatibility (v2 hulls). */
 export const OUTLINE_LAYER = 1;
 
-let gradient: THREE.DataTexture | null = null;
-/** 3-step toon ramp. */
-export function gradientMap(): THREE.DataTexture {
-  if (!gradient) {
-    gradient = new THREE.DataTexture(new Uint8Array([105, 185, 255]), 3, 1, THREE.RedFormat);
-    gradient.minFilter = THREE.NearestFilter;
-    gradient.magFilter = THREE.NearestFilter;
-    gradient.generateMipmaps = false;
-    gradient.needsUpdate = true;
-  }
-  return gradient;
-}
+const cache = new Map<string, THREE.MeshStandardMaterial>();
 
-const cache = new Map<string, THREE.MeshToonMaterial>();
-export function toon(color: number, map?: THREE.Texture): THREE.MeshToonMaterial {
-  const key = `${color}:${map?.uuid ?? ''}`;
+/** A plain PBR material (name kept from v2). */
+export function toon(color: number, map?: THREE.Texture, rough = 0.72): THREE.MeshStandardMaterial {
+  const key = `${color}:${map?.uuid ?? ''}:${rough}`;
   let m = cache.get(key);
   if (!m) {
-    m = new THREE.MeshToonMaterial({ color, gradientMap: gradientMap(), map: map ?? null });
+    m = new THREE.MeshStandardMaterial({ color, map: map ?? null, roughness: rough, metalness: 0 });
     cache.set(key, m);
   }
   return m;
 }
 
-/** Unlit, HDR-bright material: these are the only things that bloom. */
+export function std(color: number, rough = 0.72, metal = 0, extra: Partial<THREE.MeshStandardMaterialParameters> = {}): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, ...extra });
+}
+
+/** Material from a procedural PBR set. */
+export function pbr(set: PBRSet, extra: Partial<THREE.MeshStandardMaterialParameters> = {}, normalScale = 1): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    map: set.map,
+    normalMap: set.normalMap,
+    roughnessMap: set.roughnessMap,
+    roughness: 1,
+    normalScale: new THREE.Vector2(normalScale, normalScale),
+    ...extra,
+  });
+}
+
+/** Unlit, HDR-bright material: the only things that bloom (door window, strip, EXIT, sirens). */
 export function glow(color: number, intensity = 3): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(intensity) });
 }
 
-const hullMat = new THREE.MeshBasicMaterial({ color: 0x15161c, side: THREE.BackSide });
-const box = new THREE.Box3();
-const size = new THREE.Vector3();
-const center = new THREE.Vector3();
+/** v2 inverted-hull outlines are gone in v3 (no-op kept for call sites). */
+export function outline(_target: THREE.Object3D, _thickness = 0.012): void {}
 
-/** Inverted-hull outline: a slightly larger black back-face copy, scaled about the geometry centre. */
-export function outline(target: THREE.Object3D, thickness = 0.012): void {
-  const meshes: THREE.Mesh[] = [];
-  target.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (m.isMesh && !m.userData.isHull && !m.userData.noOutline) meshes.push(m);
+/** Mark every mesh under o as shadow caster/receiver. */
+export function shadows(o: THREE.Object3D, cast = true, receive = true): void {
+  o.traverse((x) => {
+    const m = x as THREE.Mesh;
+    if (m.isMesh) {
+      m.castShadow = cast;
+      m.receiveShadow = receive;
+    }
   });
-  for (const m of meshes) {
-    const g = m.geometry;
-    if (!g.boundingBox) g.computeBoundingBox();
-    box.copy(g.boundingBox!);
-    box.getSize(size);
-    box.getCenter(center);
-    const s = (v: number) => 1 + (2 * thickness) / Math.max(v, 0.02);
-    const hull = new THREE.Mesh(g, hullMat);
-    hull.userData.isHull = true;
-    hull.scale.set(s(size.x), s(size.y), s(size.z));
-    hull.position.set(center.x * (1 - hull.scale.x), center.y * (1 - hull.scale.y), center.z * (1 - hull.scale.z));
-    hull.layers.set(OUTLINE_LAYER);
-    hull.raycast = () => {};
-    m.add(hull);
-  }
 }

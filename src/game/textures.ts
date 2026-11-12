@@ -354,3 +354,161 @@ export function coverTexture(): THREE.CanvasTexture {
   g.fillRect(0, 242, 64, 14);
   return tex(c);
 }
+
+// ---------------------------------------------------------------- v3 additions
+
+/** Chalk writing on the green board (drawn on top of the procedural slate). */
+export function drawBoard(g: CanvasRenderingContext2D, _w: number, _h: number): void {
+  const chalk = (alpha = 0.92) => `rgba(244,244,236,${alpha})`;
+  g.save();
+  g.shadowColor = 'rgba(255,255,255,0.25)';
+  g.shadowBlur = 2;
+  g.fillStyle = chalk();
+  g.font = `600 68px ${CHALK}`;
+  g.fillText('BIOLOGY FINAL', 50, 105);
+  g.font = `500 44px ${CHALK}`;
+  g.fillText('10:00 - 11:30', 54, 168);
+  g.font = `600 42px ${CHALK}`;
+  g.fillText('NO PHONES. NO TALKING.', 54, 285);
+  g.fillText('Good luck!', 620, 285);
+  g.strokeStyle = chalk(0.85);
+  g.lineWidth = 4.5;
+  const x0 = 600;
+  const x1 = 960;
+  for (const ph of [0, Math.PI]) {
+    g.beginPath();
+    for (let x = x0; x <= x1; x += 4) {
+      const y = 140 + Math.sin((x - x0) / 30 + ph) * 38;
+      if (x === x0) g.moveTo(x, y);
+      else g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  g.lineWidth = 2.5;
+  for (let x = x0 + 8; x < x1; x += 22) {
+    g.beginPath();
+    g.moveTo(x, 140 + Math.sin((x - x0) / 30) * 38);
+    g.lineTo(x, 140 + Math.sin((x - x0) / 30 + Math.PI) * 38);
+    g.stroke();
+  }
+  g.restore();
+}
+
+/** An original, schematic "human body systems" poster (simple line art). */
+export function anatomyPoster(): THREE.CanvasTexture {
+  const [c, g] = canvas(320, 480);
+  g.fillStyle = '#f4efe2';
+  g.fillRect(0, 0, 320, 480);
+  g.fillStyle = '#2b4a6b';
+  g.fillRect(0, 0, 320, 54);
+  g.fillStyle = '#fff';
+  g.font = `700 26px ${ROUND}`;
+  g.textAlign = 'center';
+  g.fillText('BODY SYSTEMS', 160, 36);
+  // figure outline
+  g.strokeStyle = '#4a4a52';
+  g.lineWidth = 3;
+  g.beginPath();
+  g.arc(160, 98, 24, 0, Math.PI * 2);
+  g.moveTo(160, 122);
+  g.lineTo(160, 270);
+  g.moveTo(160, 150);
+  g.lineTo(108, 230);
+  g.moveTo(160, 150);
+  g.lineTo(212, 230);
+  g.moveTo(160, 270);
+  g.lineTo(126, 410);
+  g.moveTo(160, 270);
+  g.lineTo(194, 410);
+  g.stroke();
+  // ribs
+  g.lineWidth = 2;
+  for (let i = 0; i < 6; i++) {
+    g.beginPath();
+    g.ellipse(160, 160 + i * 14, 26 - i, 6, 0, 0, Math.PI);
+    g.stroke();
+  }
+  // heart + lungs + stomach in colour
+  g.fillStyle = 'rgba(200,70,70,0.75)';
+  g.beginPath();
+  g.ellipse(152, 178, 9, 11, 0.3, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = 'rgba(220,140,160,0.45)';
+  g.beginPath();
+  g.ellipse(140, 170, 12, 22, 0, 0, Math.PI * 2);
+  g.ellipse(180, 170, 12, 22, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = 'rgba(220,170,90,0.6)';
+  g.beginPath();
+  g.ellipse(168, 228, 16, 11, -0.3, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#4a4a52';
+  g.font = `500 15px ${ROUND}`;
+  g.textAlign = 'left';
+  ['heart', 'lungs', 'stomach'].forEach((l, i) => g.fillText(l, 228, 172 + i * 30));
+  g.strokeStyle = 'rgba(74,74,82,0.5)';
+  g.lineWidth = 1;
+  return tex(c);
+}
+
+/** Student work: a hand-drawn diagram on lined paper. */
+export function studentWork(kind: number): THREE.CanvasTexture {
+  const [c, g] = canvas(200, 260);
+  g.fillStyle = '#fbfaf3';
+  g.fillRect(0, 0, 200, 260);
+  g.strokeStyle = 'rgba(120,150,200,0.35)';
+  g.lineWidth = 1;
+  for (let y = 30; y < 260; y += 14) {
+    g.beginPath();
+    g.moveTo(0, y);
+    g.lineTo(200, y);
+    g.stroke();
+  }
+  const cols = ['#3a6ad6', '#2f8f5a', '#c0503a', '#8a4fd6'];
+  g.strokeStyle = cols[kind % cols.length];
+  g.fillStyle = cols[kind % cols.length];
+  g.lineWidth = 3;
+  g.font = `600 16px ${CHALK}`;
+  if (kind % 3 === 0) {
+    g.fillText('Plant cell', 20, 24);
+    g.strokeRect(40, 60, 120, 140);
+    g.beginPath();
+    g.arc(100, 120, 22, 0, Math.PI * 2);
+    g.stroke();
+  } else if (kind % 3 === 1) {
+    g.fillText('Mitosis', 20, 24);
+    for (let i = 0; i < 3; i++) {
+      g.beginPath();
+      g.arc(50 + i * 50, 130, 20, 0, Math.PI * 2);
+      g.stroke();
+    }
+  } else {
+    g.fillText('Food web', 20, 24);
+    for (let i = 0; i < 5; i++) {
+      g.beginPath();
+      g.arc(40 + (i % 3) * 60, 80 + Math.floor(i / 3) * 80, 12, 0, Math.PI * 2);
+      g.stroke();
+    }
+  }
+  g.fillStyle = '#c0503a';
+  g.font = `600 22px ${CHALK}`;
+  g.fillText(['A', 'A-', 'B+', '✓'][kind % 4], 150, 245);
+  return tex(c);
+}
+
+/** Speaker grille / vent perforations (normal-ish height as albedo). */
+export function grilleTexture(slots = false): THREE.CanvasTexture {
+  const [c, g] = canvas(128, 128);
+  g.fillStyle = '#c9c6bd';
+  g.fillRect(0, 0, 128, 128);
+  g.fillStyle = '#3a3a40';
+  if (slots) for (let y = 10; y < 120; y += 12) g.fillRect(10, y, 108, 5);
+  else
+    for (let y = 8; y < 128; y += 10)
+      for (let x = 8 + ((y / 10) % 2) * 5; x < 128; x += 10) {
+        g.beginPath();
+        g.arc(x, y, 2.6, 0, Math.PI * 2);
+        g.fill();
+      }
+  return tex(c);
+}

@@ -21,7 +21,8 @@ import { codeScene, doorScene, endingScene, examScene, lockdownScene, textsScene
 import { Input } from './input';
 import type { Person, Pose } from './people';
 import { Player } from './player';
-import { Renderer } from './render';
+import { type Preset, Renderer, presetSpec } from './render';
+import type { Library } from './materials';
 import { GUIDE_LAYER, Guidance } from './guidance';
 import { outline, toon } from './toon';
 import { AISLE_X, DOOR, HUDDLE, NOAH_WALL_SPOT, PA_POS, PLAYER_DESK, ROOM, SEAT, SWITCH_POS, World, inDoorWallZone } from './world';
@@ -104,7 +105,7 @@ export class Game {
   clock = new SimClock();
   tweens = new Tweens();
   audio = new AudioEngine();
-  world = new World();
+  world: World;
   player = new Player();
   camera = new THREE.PerspectiveCamera(75, 16 / 9, 0.03, 60);
   renderer: Renderer;
@@ -156,11 +157,13 @@ export class Game {
     private canvas: HTMLCanvasElement,
     host: HTMLElement,
     speed = 1,
-    opts: { noLock?: boolean; lowQuality?: boolean } = {},
+    opts: { noLock?: boolean; preset?: Preset; lib: Library },
   ) {
     this.clock.speed = speed;
     this.settings = this.loadSettings();
-    if (opts.lowQuality) this.settings.lowQuality = true;
+    if (opts.preset) this.settings.quality = opts.preset;
+    const spec = presetSpec(this.resolvePreset(this.settings.quality));
+    this.world = new World(opts.lib, { shadows: spec.shadows, shadowSize: spec.shadowSize, rectLights: true, dust: 400, sirenShadows: true });
     this.renderer = new Renderer(canvas, this.world.scene, this.camera);
     this.world.scene.add(this.camera);
     this.flashlight.position.set(DOOR.x, 1.5, DOOR.z - 0.6);
@@ -233,7 +236,7 @@ export class Game {
 
   private loadSettings(): Settings {
     const coarse = !!window.matchMedia?.('(pointer: coarse)').matches;
-    const d: Settings = { sensitivity: 1, invertY: false, sound: true, lowQuality: coarse, guidance: 'full' };
+    const d: Settings = { sensitivity: 1, invertY: false, sound: true, quality: coarse ? 'low' : 'auto', videoLens: false, guidance: 'full' };
     try {
       return { ...d, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
     } catch {
@@ -246,7 +249,9 @@ export class Game {
     this.input.sensitivity = s.sensitivity;
     this.input.invertY = s.invertY;
     this.audio.setMuted(!s.sound);
-    this.renderer.setQuality(!s.lowQuality);
+    this.renderer.videoLens = s.videoLens;
+    this.renderer.setPreset(this.resolvePreset(s.quality));
+    this.world.applyQuality(this.renderer.spec);
     this.guidance?.setMode(s.guidance);
     this.ui.guidanceOff = s.guidance === 'off';
     try {
@@ -266,6 +271,12 @@ export class Game {
   /** Capture the mouse again (works inside a click/key gesture). */
   relock(): void {
     if (this.input.lockMode && PLAY_SCENES.includes(this.store.state.scene) && !this.flags.endShown && !this.ui.phone.isOpen) this.input.requestLock();
+  }
+
+  /** 'auto' picks a preset from a short benchmark (see main.ts); phones get Low. */
+  autoPreset: Preset = 'high';
+  resolvePreset(q: Settings['quality']): Preset {
+    return q === 'auto' ? this.autoPreset : q;
   }
 
   private lockChanged(locked: boolean): void {
@@ -617,6 +628,7 @@ export class Game {
     this.flashlight.intensity = 0;
     this.player.sitAt(SEAT.x, SEAT.z);
     this.player.canMove = false;
+    w.flickerPanels(1.4);
     this.ui.setHud(true);
     this.ui.setTopbar(true);
     this.ui.setMovement(false, this.touch);
@@ -1284,6 +1296,9 @@ export class Game {
     const target = ['lockdown', 'texts', 'waiting', 'door', 'ending'].includes(st.scene) ? Math.min(1, noise * 0.8 + beat + (st.scene === 'door' ? 0.25 : 0)) : 0;
     this.panic += (target - this.panic) * Math.min(1, dt * 1.5);
     this.renderer.panic = this.flags.endShown ? 0 : this.panic;
+    this.renderer.mood = this.world.mood;
+    this.renderer.targetExposure = this.world.lightsOn ? 1.0 : 1.4;
+    this.renderer.closeUp = this.ui.phone.isOpen;
     this.audio.whine(this.panic > 0.35 ? this.panic - 0.3 : 0);
   }
 

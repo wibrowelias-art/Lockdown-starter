@@ -3,6 +3,8 @@ import '@fontsource/fredoka/600.css';
 import '@fontsource/fredoka/700.css';
 import './ui/styles.css';
 import { Game } from './game/game';
+import { buildLibrary } from './game/materials';
+import type { Preset } from './game/render';
 
 const params = new URLSearchParams(location.search);
 const speed = Math.max(0.25, Math.min(40, Number(params.get('speed')) || 1));
@@ -34,7 +36,22 @@ async function start(): Promise<void> {
   } catch {
     /* fall back to system fonts */
   }
-  const game = new Game(canvas, app, speed, { noLock: params.has('nolock'), lowQuality: params.has('lowq') });
+  // loading screen while the procedural textures are generated
+  const load = document.createElement('div');
+  load.className = 'loading';
+  load.dataset.testid = 'loading';
+  load.innerHTML = '<div class="ld-title">ROOM 214</div><div class="ld-bar"><span></span></div><div class="ld-label">Preparing the room...</div>';
+  app.append(load);
+  const bar = load.querySelector('span') as HTMLElement;
+  const label = load.querySelector('.ld-label') as HTMLElement;
+  const coarse = !!window.matchMedia?.('(pointer: coarse)').matches;
+  const forced = (params.get('preset') as Preset | null) ?? (params.has('lowq') ? 'low' : null);
+  const lib = await buildLibrary((p, what) => {
+    bar.style.width = `${Math.round(p * 100)}%`;
+    label.textContent = `Preparing the room: ${what}`;
+  }, forced === 'low' || coarse ? 'low' : 'high');
+  const game = new Game(canvas, app, speed, { noLock: params.has('nolock'), preset: forced ?? undefined, lib });
+  load.remove();
   // Hooks for automated playthroughs (Playwright) and debugging.
   (window as unknown as { __lockdown: unknown }).__lockdown = {
     state: () => JSON.parse(JSON.stringify(game.store.state)),
@@ -52,7 +69,7 @@ async function start(): Promise<void> {
     fps: () => game.fps,
     simTime: () => game.clock.time,
     momReply: () => (window as unknown as { __momReply?: () => void }).__momReply?.(),
-    quality: () => (game.renderer.high ? 'high' : 'low'),
+    quality: () => game.renderer.preset,
     lookAt: (x: number, y: number, z: number) => game.lookAtPoint(x, y, z),
     holdUse: (down: boolean) => (game.input.holdingUse = down),
     holdingSheet: () => game.flags.holdingSheet,
@@ -63,6 +80,12 @@ async function start(): Promise<void> {
     },
     navTo: (x: number, z: number, within = 0.15) => game.navTo(x, z, within),
     danger: () => game.flags.danger,
+    pass: (name: 'ao' | 'bloom' | 'smaa' | 'grade', on: boolean) => game.renderer.toggle(name, on),
+    setPreset: (p: Preset) => {
+      game.settings.quality = p;
+      game.applySettings(game.settings);
+    },
+    world: () => game.world,
     setYaw: (y: number) => {
       game.player.yaw = y;
       game.player.pitch = 0;

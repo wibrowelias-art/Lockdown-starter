@@ -257,7 +257,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .guide-pointer { position: absolute; left: 0; top: 0; width: 44px; height: 44px; pointer-events: none; }
 .guide-pointer .chev { position: absolute; inset: 8px; border-top: 5px solid #fff4e0; border-right: 5px solid #fff4e0; border-radius: 3px; transform: rotate(45deg); filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.8)); }
 .guide-pointer.ping::after { content: ''; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid rgba(255, 240, 214, 0.8); animation: ping 1.1s ease-out infinite; }
-.keyhint { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; background: rgba(16, 18, 26, 0.86); border: 1.5px solid rgba(255, 240, 214, 0.5); border-radius: 14px; padding: 8px 16px; font-size: 17px; color: #fff4e0; transition: opacity 0.6s; }
+.keyhint { position: absolute; left: 50%; top: 112px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; background: rgba(16, 18, 26, 0.86); border: 1.5px solid rgba(255, 240, 214, 0.5); border-radius: 14px; padding: 8px 16px; font-size: 17px; color: #fff4e0; transition: opacity 0.6s; }
 .keyhint.out { opacity: 0; }
 .hold-ring { position: absolute; left: 50%; top: calc(50% + 52px); width: 36px; height: 36px; transform: translateX(-50%); }
 .hold-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
@@ -273,3 +273,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @keyframes ping { from { transform: scale(0.6); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
 @keyframes glowpulse { from { outline-color: rgba(255, 240, 214, 0.35); } to { outline-color: rgba(255, 240, 214, 0.95); } }
 @media (max-width: 700px) { .guide-card { top: 52px; max-width: 92vw; font-size: 13px; } .checklist { top: 96px; } }
+
+.loading { position: absolute; inset: 0; z-index: 50; display: grid; place-content: center; gap: 14px; background: #0b0d14; color: #e8e4da; text-align: center; }
+.ld-title { font-size: 34px; letter-spacing: 0.3em; font-weight: 700; }
+.ld-bar { width: min(360px, 70vw); height: 6px; background: rgba(255, 255, 255, 0.12); border-radius: 3px; overflow: hidden; }
+.ld-bar span { display: block; height: 100%; width: 0; background: #e8e4da; transition: width 0.15s; }
+.ld-label { font-size: 14px; color: #a8a49a; }

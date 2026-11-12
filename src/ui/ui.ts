@@ -41,7 +41,8 @@ export interface Settings {
   sensitivity: number;
   invertY: boolean;
   sound: boolean;
-  lowQuality: boolean;
+  quality: 'auto' | 'low' | 'medium' | 'high' | 'ultra';
+  videoLens: boolean;
   guidance: 'full' | 'minimal' | 'off';
 }
 
@@ -516,7 +517,10 @@ export class UI {
       <label>Mouse sensitivity <input type="range" min="0.3" max="2.5" step="0.1" value="${s.sensitivity}" data-k="sensitivity"></label>
       <label><input type="checkbox" ${s.invertY ? 'checked' : ''} data-k="invertY"> Invert Y</label>
       <label><input type="checkbox" ${s.sound ? 'checked' : ''} data-k="sound" data-testid="opt-sound"> Sound</label>
-      <label><input type="checkbox" ${s.lowQuality ? 'checked' : ''} data-k="lowQuality" data-testid="opt-lowq"> Low quality (for phones)</label>
+      <label>Quality <select data-k="quality" data-testid="opt-quality">
+        ${['auto', 'low', 'medium', 'high', 'ultra'].map((q) => `<option value="${q}" ${s.quality === q ? 'selected' : ''}>${q[0].toUpperCase() + q.slice(1)}</option>`).join('')}
+      </select></label>
+      <label><input type="checkbox" ${s.videoLens ? 'checked' : ''} data-k="videoLens" data-testid="opt-lens"> Video lens (fisheye, like the reference video)</label>
       <label>Guidance <select data-k="guidance" data-testid="opt-guidance">
         <option value="full" ${s.guidance === 'full' ? 'selected' : ''}>Full: card, outline, pointers</option>
         <option value="minimal" ${s.guidance === 'minimal' ? 'selected' : ''}>Minimal: task card only</option>
