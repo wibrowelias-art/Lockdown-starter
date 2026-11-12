@@ -14,107 +14,103 @@ function tex(c: HTMLCanvasElement): THREE.CanvasTexture {
   return t;
 }
 
-const HAND = '"Segoe Print", "Comic Sans MS", "Bradley Hand", cursive';
-const SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const ROUND = '"Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif';
+const CHALK = '"Fredoka", "Comic Sans MS", cursive';
 
+/** Green board: "BIOLOGY FINAL 10:00 - 11:30", "NO PHONES. NO TALKING. Good luck!" and a DNA helix. */
 export function boardTexture(): THREE.CanvasTexture {
   const [c, g] = canvas(1024, 384);
-  g.fillStyle = '#e9ece9';
+  g.fillStyle = '#2f6a50';
   g.fillRect(0, 0, 1024, 384);
-  // faint ghost of erased marker
-  g.globalAlpha = 0.08;
-  g.fillStyle = '#335';
-  g.font = `40px ${HAND}`;
-  g.fillText('Krebs cycle ->  NADH  FADH2', 520, 330);
-  g.globalAlpha = 1;
-  g.fillStyle = '#1d3c78';
-  g.font = `bold 64px ${HAND}`;
-  g.fillText('BIOLOGY FINAL', 60, 100);
-  g.fillStyle = '#2a2a2a';
-  g.font = `34px ${HAND}`;
-  g.fillText('Period 3  -  Ms. Okafor  -  Room 214', 60, 160);
-  g.fillStyle = '#7a1f1f';
-  g.fillText('Phones away. Eyes on your own paper.', 60, 225);
-  g.fillStyle = '#2a2a2a';
-  g.fillText('Bubble sheet: #41 - 48 last page', 60, 285);
-  // a small hand-drawn cell
-  g.strokeStyle = '#2d6a3e';
+  g.fillStyle = 'rgba(255,255,255,0.05)';
+  for (let i = 0; i < 40; i++) g.fillRect(Math.random() * 1024, Math.random() * 384, 120, 6);
+  g.fillStyle = '#f4f4ec';
+  g.font = `600 70px ${CHALK}`;
+  g.fillText('BIOLOGY FINAL', 50, 105);
+  g.font = `500 46px ${CHALK}`;
+  g.fillText('10:00 - 11:30', 54, 170);
+  g.font = `600 44px ${CHALK}`;
+  g.fillText('NO PHONES. NO TALKING.', 54, 285);
+  g.fillText('Good luck!', 620, 285);
+  // DNA helix
+  g.strokeStyle = '#f4f4ec';
   g.lineWidth = 5;
-  g.beginPath();
-  g.ellipse(860, 150, 110, 80, 0.2, 0, Math.PI * 2);
-  g.stroke();
-  g.fillStyle = '#2d6a3e';
-  g.beginPath();
-  g.arc(850, 150, 26, 0, Math.PI * 2);
-  g.fill();
+  const x0 = 600;
+  const x1 = 960;
+  for (const ph of [0, Math.PI]) {
+    g.beginPath();
+    for (let x = x0; x <= x1; x += 4) {
+      const y = 140 + Math.sin((x - x0) / 30 + ph) * 38;
+      if (x === x0) g.moveTo(x, y);
+      else g.lineTo(x, y);
+    }
+    g.stroke();
+  }
   g.lineWidth = 3;
-  g.beginPath();
-  g.ellipse(910, 110, 22, 10, 0.5, 0, Math.PI * 2);
-  g.stroke();
-  g.beginPath();
-  g.ellipse(800, 200, 20, 9, -0.4, 0, Math.PI * 2);
-  g.stroke();
+  for (let x = x0 + 8; x < x1; x += 22) {
+    const a = 140 + Math.sin((x - x0) / 30) * 38;
+    const b = 140 + Math.sin((x - x0) / 30 + Math.PI) * 38;
+    g.beginPath();
+    g.moveTo(x, a);
+    g.lineTo(x, b);
+    g.stroke();
+  }
   return tex(c);
 }
 
 export class ClockFace {
   texture: THREE.CanvasTexture;
   private g: CanvasRenderingContext2D;
-  private c: HTMLCanvasElement;
   private shown = -1;
 
   constructor() {
-    [this.c, this.g] = canvas(256, 256);
-    this.texture = tex(this.c);
+    const [c, g] = canvas(256, 256);
+    this.g = g;
+    this.texture = tex(c);
     this.set(10 * 60 + 42);
   }
 
-  /** minutes since midnight */
   set(minutes: number): void {
     const m = Math.floor(minutes);
     if (m === this.shown) return;
     this.shown = m;
     const g = this.g;
     g.clearRect(0, 0, 256, 256);
-    g.fillStyle = '#f3f1ea';
+    g.fillStyle = '#fbfaf4';
     g.beginPath();
     g.arc(128, 128, 120, 0, Math.PI * 2);
     g.fill();
-    g.lineWidth = 10;
-    g.strokeStyle = '#222';
+    g.lineWidth = 12;
+    g.strokeStyle = '#1b1c22';
     g.stroke();
-    g.fillStyle = '#222';
+    g.fillStyle = '#1b1c22';
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2;
       g.save();
-      g.translate(128 + Math.sin(a) * 100, 128 - Math.cos(a) * 100);
+      g.translate(128 + Math.sin(a) * 98, 128 - Math.cos(a) * 98);
       g.rotate(a);
-      g.fillRect(-3, -10, 6, 20);
+      g.fillRect(-4, -9, 8, 18);
       g.restore();
     }
     const hand = (angle: number, len: number, w: number) => {
       g.save();
       g.translate(128, 128);
       g.rotate(angle);
-      g.fillRect(-w / 2, -len, w, len + 12);
+      g.fillRect(-w / 2, -len, w, len + 10);
       g.restore();
     };
-    const hours = (m / 60) % 12;
-    hand((hours / 12) * Math.PI * 2, 60, 10);
-    hand(((m % 60) / 60) * Math.PI * 2, 92, 6);
-    g.beginPath();
-    g.arc(128, 128, 8, 0, Math.PI * 2);
-    g.fill();
+    hand((((m / 60) % 12) / 12) * Math.PI * 2, 58, 12);
+    hand(((m % 60) / 60) * Math.PI * 2, 90, 8);
     this.texture.needsUpdate = true;
   }
 }
 
 export const SHEET_W = 512;
 export const SHEET_H = 660;
-export const BUBBLE_ROWS_Y0 = 210;
-export const BUBBLE_ROW_DY = 54;
-export const BUBBLE_XS = [210, 280, 350, 420];
-export const BUBBLE_R = 18;
+const ROW_Y0 = 250;
+const ROW_DY = 48;
+const XS = [250, 310, 370, 430];
+const R = 17;
 
 export class AnswerSheet {
   texture: THREE.CanvasTexture;
@@ -129,22 +125,16 @@ export class AnswerSheet {
     this.draw();
   }
 
-  /** Map a UV hit on the sheet to a bubble. */
   bubbleAt(u: number, v: number): { row: number; col: number } | null {
     const x = u * SHEET_W;
     const y = (1 - v) * SHEET_H;
-    for (let r = 0; r < 8; r++) {
-      const by = BUBBLE_ROWS_Y0 + r * BUBBLE_ROW_DY;
-      for (let c = 0; c < 4; c++) {
-        if (Math.hypot(x - BUBBLE_XS[c], y - by) <= BUBBLE_R + 9) return { row: r, col: c };
-      }
-    }
+    for (let r = 0; r < 8; r++)
+      for (let c = 0; c < 4; c++) if (Math.hypot(x - XS[c], y - (ROW_Y0 + r * ROW_DY)) <= R + 8) return { row: r, col: c };
     return null;
   }
 
-  /** UV of bubble centre (for tests / hand animation). */
   bubbleUV(row: number, col: number): [number, number] {
-    return [BUBBLE_XS[col] / SHEET_W, 1 - (BUBBLE_ROWS_Y0 + row * BUBBLE_ROW_DY) / SHEET_H];
+    return [XS[col] / SHEET_W, 1 - (ROW_Y0 + row * ROW_DY) / SHEET_H];
   }
 
   fill(row: number, col: number): void {
@@ -166,44 +156,44 @@ export class AnswerSheet {
 
   private draw(): void {
     const g = this.g;
-    g.fillStyle = '#f4f1e6';
+    g.fillStyle = '#fbfaf5';
     g.fillRect(0, 0, SHEET_W, SHEET_H);
-    g.fillStyle = '#6b8f71';
-    g.fillRect(0, 0, SHEET_W, 26);
-    g.fillRect(0, SHEET_H - 18, SHEET_W, 18);
-    g.fillStyle = '#2d4a33';
-    g.font = `bold 26px ${SANS}`;
-    g.fillText('ANSWER SHEET  -  BIOLOGY', 26, 66);
-    g.font = `20px ${SANS}`;
-    g.fillText('NAME:', 26, 112);
-    g.strokeStyle = '#6b8f71';
+    g.strokeStyle = '#1b1c22';
+    g.lineWidth = 6;
+    g.strokeRect(3, 3, SHEET_W - 6, SHEET_H - 6);
+    g.fillStyle = '#1b1c22';
+    g.font = `700 32px ${ROUND}`;
+    g.fillText('BIOLOGY - FINAL EXAM', 40, 66);
+    g.font = `500 28px ${ROUND}`;
+    g.fillText('Name:', 40, 120);
+    g.font = `500 34px ${CHALK}`;
+    g.fillStyle = '#2b3a8f';
+    g.fillText('Noah R.', 130, 120);
+    g.strokeStyle = '#8a8f9a';
     g.lineWidth = 2;
-    g.beginPath();
-    g.moveTo(96, 114);
-    g.lineTo(330, 114);
-    g.stroke();
-    g.fillStyle = '#28324a';
-    g.font = `30px ${HAND}`;
-    g.fillText('Noah', 110, 108);
-    g.fillStyle = '#2d4a33';
-    g.font = `18px ${SANS}`;
-    g.fillText('Fill bubbles completely. No stray marks.', 26, 150);
-    ['A', 'B', 'C', 'D'].forEach((l, i) => g.fillText(l, BUBBLE_XS[i] - 6, 182));
+    for (let i = 0; i < 3; i++) {
+      g.beginPath();
+      g.moveTo(40, 160 + i * 22);
+      g.lineTo(220, 160 + i * 22);
+      g.stroke();
+    }
+    g.fillStyle = '#1b1c22';
+    g.font = `600 20px ${ROUND}`;
+    ['A', 'B', 'C', 'D'].forEach((l, i) => g.fillText(l, XS[i] - 6, 222));
     for (let r = 0; r < 8; r++) {
-      const y = BUBBLE_ROWS_Y0 + r * BUBBLE_ROW_DY;
-      g.fillStyle = '#2d4a33';
-      g.font = `bold 22px ${SANS}`;
-      g.fillText(`${41 + r}.`, 120, y + 8);
+      const y = ROW_Y0 + r * ROW_DY;
+      g.fillStyle = '#1b1c22';
+      g.font = `600 22px ${ROUND}`;
+      g.fillText(`${41 + r}.`, 170, y + 8);
       for (let c = 0; c < 4; c++) {
-        const x = BUBBLE_XS[c];
         g.beginPath();
-        g.arc(x, y, BUBBLE_R, 0, Math.PI * 2);
+        g.arc(XS[c], y, R, 0, Math.PI * 2);
         const filled = this.answers[r] === c;
-        const hov = this.hover && this.hover.row === r && this.hover.col === c;
-        g.fillStyle = filled ? '#1b1b1f' : hov ? '#d9d2a8' : '#f4f1e6';
+        const hov = this.hover?.row === r && this.hover?.col === c;
+        g.fillStyle = filled ? '#1b1c22' : hov ? '#f2d98a' : '#fbfaf5';
         g.fill();
-        g.lineWidth = 2.5;
-        g.strokeStyle = '#6b8f71';
+        g.lineWidth = 3;
+        g.strokeStyle = '#1b1c22';
         g.stroke();
       }
     }
@@ -211,100 +201,24 @@ export class AnswerSheet {
   }
 }
 
-export function bookletTexture(): THREE.CanvasTexture {
-  const [c, g] = canvas(512, 660);
-  g.fillStyle = '#efede6';
-  g.fillRect(0, 0, 512, 660);
-  g.fillStyle = '#222';
-  g.font = `bold 22px ${SANS}`;
-  g.fillText('Part IV  (page 6 of 6)', 24, 44);
-  const qs = [
-    '41. Which organelle makes most of',
-    '     a cell’s ATP?',
-    '42. Osmosis moves water toward...',
-    '43. A codon is made of how many',
-    '     nucleotides?',
-    '44. Where are proteins assembled?',
-    '45. Chlorophyll absorbs mostly...',
-    '46. Which phase lines chromosomes',
-    '     up in the middle?',
-    '47. Enzymes lower the ...',
-    '48. Give one difference between',
-    '     plant and animal cells.',
-  ];
-  g.font = `19px ${SANS}`;
-  qs.forEach((q, i) => g.fillText(q, 24, 92 + i * 44));
-  return tex(c);
-}
-
-export function posterCell(): THREE.CanvasTexture {
-  const [c, g] = canvas(384, 512);
-  g.fillStyle = '#1f3b4d';
-  g.fillRect(0, 0, 384, 512);
-  g.fillStyle = '#e8d9a8';
-  g.font = `bold 44px ${SANS}`;
-  g.fillText('THE CELL', 90, 70);
-  g.strokeStyle = '#9fd4a3';
-  g.lineWidth = 6;
-  g.beginPath();
-  g.ellipse(192, 280, 150, 170, 0, 0, Math.PI * 2);
-  g.stroke();
-  g.fillStyle = '#c47a5a';
-  g.beginPath();
-  g.arc(180, 270, 46, 0, Math.PI * 2);
-  g.fill();
-  g.strokeStyle = '#f0b860';
-  g.lineWidth = 4;
-  for (const [x, y, r] of [
-    [110, 200, 0.4],
-    [270, 340, -0.6],
-    [250, 190, 1.1],
-  ] as const) {
-    g.beginPath();
-    g.ellipse(x, y, 30, 13, r, 0, Math.PI * 2);
-    g.stroke();
-  }
-  g.fillStyle = '#9fd4a3';
-  for (let i = 0; i < 26; i++) g.fillRect(70 + Math.random() * 240, 150 + Math.random() * 260, 4, 4);
-  return tex(c);
-}
-
-export function posterMitosis(): THREE.CanvasTexture {
-  const [c, g] = canvas(512, 256);
-  g.fillStyle = '#efe6cf';
-  g.fillRect(0, 0, 512, 256);
-  g.fillStyle = '#5a2e2e';
-  g.font = `bold 34px ${SANS}`;
-  g.fillText('MITOSIS', 180, 44);
-  const names = ['pro', 'meta', 'ana', 'telo'];
-  names.forEach((n, i) => {
-    const x = 70 + i * 120;
-    g.strokeStyle = '#5a2e2e';
-    g.lineWidth = 4;
-    g.beginPath();
-    if (i < 3) g.arc(x, 140, 44, 0, Math.PI * 2);
-    else {
-      g.arc(x - 20, 140, 30, 0, Math.PI * 2);
-      g.moveTo(x + 50, 140);
-      g.arc(x + 20, 140, 30, 0, Math.PI * 2);
-    }
-    g.stroke();
-    g.fillStyle = '#5a2e2e';
-    g.font = `18px ${SANS}`;
-    g.fillText(n + 'phase', x - 40, 220);
-  });
-  return tex(c);
-}
-
-export function posterQuote(): THREE.CanvasTexture {
-  const [c, g] = canvas(384, 512);
-  g.fillStyle = '#3d2f4f';
-  g.fillRect(0, 0, 384, 512);
-  g.fillStyle = '#f2e6d0';
-  g.font = `bold 40px ${SANS}`;
-  ['CURIOSITY', 'IS A', 'MUSCLE.'].forEach((l, i) => g.fillText(l, 40, 180 + i * 56));
-  g.font = `22px ${SANS}`;
-  g.fillText('Use it every day.', 40, 380);
+/** Red-and-white poster beside the door. */
+export function lockdownPoster(): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 384);
+  g.fillStyle = '#fbfaf5';
+  g.fillRect(0, 0, 256, 384);
+  g.fillStyle = '#d63a3a';
+  g.fillRect(0, 0, 256, 92);
+  g.strokeStyle = '#1b1c22';
+  g.lineWidth = 8;
+  g.strokeRect(4, 4, 248, 376);
+  g.fillStyle = '#fff';
+  g.font = `700 46px ${ROUND}`;
+  g.textAlign = 'center';
+  g.fillText('LOCKDOWN', 128, 64);
+  g.textAlign = 'left';
+  g.fillStyle = '#1b1c22';
+  g.font = `600 36px ${ROUND}`;
+  ['1 LOCK', '2 LIGHTS', '3 OUT OF', '   SIGHT'].forEach((l, i) => g.fillText(l, 26, 160 + i * 56));
   return tex(c);
 }
 
@@ -313,14 +227,98 @@ export function signTexture(text: string, bg: string, fg: string, w = 256, h = 1
   g.fillStyle = bg;
   g.fillRect(0, 0, w, h);
   g.fillStyle = fg;
-  g.font = `bold ${size}px ${SANS}`;
+  g.font = `700 ${size}px ${ROUND}`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(text, w / 2, h / 2 + 4);
   return tex(c);
 }
 
-/** Soft stripes for light falling through blinds. White on black: use additive blending and tint. */
+export function bulletinTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(512, 256);
+  g.fillStyle = '#b8864f';
+  g.fillRect(0, 0, 512, 256);
+  const cols = ['#f28ab2', '#ffd85e', '#7ec8f2', '#8fd694', '#c39af2', '#ff9f6b', '#fdf6e3'];
+  for (let i = 0; i < 14; i++) {
+    const x = 16 + (i % 7) * 70 + Math.random() * 10;
+    const y = 16 + Math.floor(i / 7) * 118 + Math.random() * 10;
+    g.save();
+    g.translate(x + 28, y + 45);
+    g.rotate((Math.random() - 0.5) * 0.15);
+    g.fillStyle = cols[i % cols.length];
+    g.fillRect(-28, -45, 56, 90);
+    g.fillStyle = 'rgba(27,28,34,0.35)';
+    for (let k = 0; k < 4; k++) g.fillRect(-20, -30 + k * 16, 40 - (k % 2) * 12, 5);
+    g.fillStyle = '#d63a3a';
+    g.beginPath();
+    g.arc(0, -40, 5, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+  }
+  g.strokeStyle = '#6b4a2a';
+  g.lineWidth = 12;
+  g.strokeRect(0, 0, 512, 256);
+  return tex(c);
+}
+
+export function posterCell(): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 340);
+  g.fillStyle = '#e8f3ea';
+  g.fillRect(0, 0, 256, 340);
+  g.fillStyle = '#2f6a50';
+  g.font = `700 36px ${ROUND}`;
+  g.fillText('THE CELL', 44, 50);
+  g.strokeStyle = '#2f6a50';
+  g.lineWidth = 6;
+  g.beginPath();
+  g.ellipse(128, 200, 95, 110, 0, 0, Math.PI * 2);
+  g.stroke();
+  g.fillStyle = '#c96a8a';
+  g.beginPath();
+  g.arc(120, 190, 32, 0, Math.PI * 2);
+  g.fill();
+  return tex(c);
+}
+
+/** Cream ceiling light panel with slats. */
+export function panelTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 128);
+  g.fillStyle = '#fffbe9';
+  g.fillRect(0, 0, 256, 128);
+  g.strokeStyle = '#1b1c22';
+  g.lineWidth = 6;
+  g.strokeRect(3, 3, 250, 122);
+  g.lineWidth = 3;
+  for (let x = 32; x < 256; x += 32) {
+    g.beginPath();
+    g.moveTo(x, 6);
+    g.lineTo(x, 122);
+    g.stroke();
+  }
+  return tex(c);
+}
+
+export function floorTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 256);
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, 256, 256);
+  g.strokeStyle = '#b9c1d0';
+  g.lineWidth = 3;
+  for (let i = 0; i <= 4; i++) {
+    g.beginPath();
+    g.moveTo(i * 64, 0);
+    g.lineTo(i * 64, 256);
+    g.moveTo(0, i * 64);
+    g.lineTo(256, i * 64);
+    g.stroke();
+  }
+  const t = tex(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(9 / 2.4, 9 / 2.4);
+  return t;
+}
+
+/** Soft stripes for light through blinds (additive). */
 export function stripesTexture(): THREE.CanvasTexture {
   const [c, g] = canvas(64, 256);
   g.fillStyle = '#000';
@@ -334,33 +332,25 @@ export function stripesTexture(): THREE.CanvasTexture {
     g.fillStyle = grd;
     g.fillRect(0, y, 64, 12);
   }
-  // fade the edges
   const edge = g.createLinearGradient(0, 0, 64, 0);
   edge.addColorStop(0, 'rgba(0,0,0,1)');
-  edge.addColorStop(0.2, 'rgba(0,0,0,0)');
-  edge.addColorStop(0.8, 'rgba(0,0,0,0)');
+  edge.addColorStop(0.25, 'rgba(0,0,0,0)');
+  edge.addColorStop(0.75, 'rgba(0,0,0,0)');
   edge.addColorStop(1, 'rgba(0,0,0,1)');
   g.fillStyle = edge;
   g.fillRect(0, 0, 64, 256);
   return tex(c);
 }
 
-export function floorTexture(): THREE.CanvasTexture {
-  const [c, g] = canvas(256, 256);
-  g.fillStyle = '#4a4a46';
-  g.fillRect(0, 0, 256, 256);
-  for (let y = 0; y < 4; y++)
-    for (let x = 0; x < 4; x++) {
-      const shade = 70 + Math.floor(Math.random() * 14);
-      g.fillStyle = `rgb(${shade},${shade},${shade - 4})`;
-      g.fillRect(x * 64 + 1, y * 64 + 1, 62, 62);
-      for (let k = 0; k < 18; k++) {
-        g.fillStyle = `rgba(30,30,30,${Math.random() * 0.25})`;
-        g.fillRect(x * 64 + Math.random() * 62, y * 64 + Math.random() * 62, 3, 2);
-      }
-    }
-  const t = tex(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(9 / 1.2, 9 / 1.2);
-  return t;
+/** A spare answer sheet, taped over the door window (backlit by the hall). */
+export function coverTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(64, 256);
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, 64, 256);
+  g.fillStyle = '#e4e6f0';
+  for (let i = 0; i < 9; i++) g.fillRect(10, 40 + i * 22, 44, 4);
+  g.fillStyle = 'rgba(240,220,150,0.9)';
+  g.fillRect(0, 0, 64, 14);
+  g.fillRect(0, 242, 64, 14);
+  return tex(c);
 }

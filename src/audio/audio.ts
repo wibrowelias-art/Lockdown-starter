@@ -1,9 +1,16 @@
 // All sound is synthesised with Web Audio: no samples, no recordings.
 // Every cue is logged (name + game scene) so automated runs can report what played.
 
-type Speaker = 'teacher' | 'theo' | 'zoe' | 'pa' | 'door' | 'officer';
+type Speaker = 'teacher' | 'theo' | 'zoe' | 'pa' | 'door' | 'officer' | 'noah' | 'student';
+export interface Vec3 {
+  x: number;
+  y: number;
+  z: number;
+}
 
 interface OutOpts {
+  /** 3D position (HRTF); overrides pan */
+  pos?: Vec3;
   pan?: number;
   verb?: number;
   gain?: number;
@@ -15,6 +22,13 @@ export class AudioEngine {
   log: string[] = [];
   muted = false;
   private master!: GainNode;
+  private duckGain!: GainNode;
+  private muffle!: BiquadFilterNode;
+  private whineGain: GainNode | null = null;
+  private droneGain: GainNode | null = null;
+  private ring: { stop: () => void } | null = null;
+  /** world positions used for door / hall sounds */
+  doorPos: Vec3 = { x: 2.6, y: 1.0, z: -4.6 };
   private dry!: GainNode;
   private verbIn!: GainNode;
   private white!: AudioBuffer;
@@ -41,7 +55,17 @@ export class AudioEngine {
     comp.ratio.value = 4;
     this.master = ctx.createGain();
     this.master.gain.value = this.muted ? 0 : 0.9;
-    this.master.connect(comp).connect(ctx.destination);
+    this.duckGain = ctx.createGain();
+    this.muffle = ctx.createBiquadFilter();
+    this.muffle.type = 'lowpass';
+    this.muffle.frequency.value = 18000;
+    this.master.connect(this.duckGain).connect(this.muffle).connect(comp).connect(ctx.destination);
+    const l = ctx.listener;
+    if (l.positionX) {
+      l.positionX.value = 0;
+      l.positionY.value = 1.1;
+      l.positionZ.value = 2;
+    }
     this.dry = ctx.createGain();
     this.dry.connect(this.master);
     const verb = ctx.createConvolver();
@@ -109,7 +133,18 @@ export class AudioEngine {
       head.connect(lp);
       head = lp;
     }
-    if (o.pan) {
+    if (o.pos) {
+      const p = ctx.createPanner();
+      p.panningModel = 'HRTF';
+      p.distanceModel = 'inverse';
+      p.refDistance = 1.2;
+      p.rolloffFactor = 1;
+      p.positionX.value = o.pos.x;
+      p.positionY.value = o.pos.y;
+      p.positionZ.value = o.pos.z;
+      head.connect(p);
+      head = p;
+    } else if (o.pan) {
       const p = ctx.createStereoPanner();
       p.pan.value = Math.max(-1, Math.min(1, o.pan));
       head.connect(p);
@@ -297,11 +332,11 @@ export class AudioEngine {
 
   // ---------- voices (murmur under subtitles) ----------
 
-  voice(who: Speaker, dur: number, whisper = false): void {
+  voice(who: Speaker, dur: number, whisper = false, pos?: Vec3): void {
     if (!this.mark(`voice:${who}${whisper ? ':whisper' : ''}`)) return;
     const ctx = this.ctx!;
     const t = this.now;
-    const formant: Record<Speaker, number> = { teacher: 820, theo: 640, zoe: 1150, pa: 1500, door: 700, officer: 560 };
+    const formant: Record<Speaker, number> = { teacher: 820, theo: 640, zoe: 1150, pa: 1500, door: 1100, officer: 560, noah: 700, student: 900 };
     const src = ctx.createBufferSource();
     src.buffer = this.white;
     src.loop = true;
@@ -343,10 +378,10 @@ export class AudioEngine {
       who === 'pa'
         ? { verb: 0.9, gain: 0.5 }
         : who === 'door'
-          ? { lowpass: 520, pan: 0.75, verb: 0.4, gain: 0.9 }
+          ? { lowpass: 900, pos: this.doorPos, verb: 0.4, gain: 1.3 }
           : who === 'officer'
             ? { lowpass: 900, pan: 0.7, verb: 0.3 }
-            : { verb: 0.15, gain: 0.7 };
+            : { verb: 0.15, gain: 0.7, pos };
     this.out(head, opts);
     src.start(t);
     src.stop(end + 0.3);
@@ -384,8 +419,9 @@ export class AudioEngine {
       const g = o.gainFrom + (o.gainTo - o.gainFrom) * k;
       const pan = o.panFrom + (o.panTo - o.panFrom) * k;
       const s = t + i * o.interval * (0.92 + Math.random() * 0.16);
-      this.tone(s, 0.12, 'sine', o.heavy ? 80 : 110, 50, 0.35 * g, 0.004, { lowpass: 600, pan, verb: 0.5 });
-      this.noise(s, 0.08, { type: 'lowpass', f: 900 }, 0.12 * g, 0.003, { pan, verb: 0.5 });
+      const pos = { x: this.doorPos.x + (pan - 0.5) * 12, y: 0.2, z: this.doorPos.z - 1.2 };
+      this.tone(s, 0.12, 'sine', o.heavy ? 80 : 110, 50, 0.6 * g, 0.004, { lowpass: 600, pos, verb: 0.5 });
+      this.noise(s, 0.08, { type: 'lowpass', f: 900 }, 0.22 * g, 0.003, { pos, verb: 0.5 });
     }
   }
 
@@ -407,13 +443,14 @@ export class AudioEngine {
     const t = this.now;
     const n = hard ? 16 : 8;
     let s = t;
-    this.tone(t, 0.12, 'sine', 160, 90, 0.25, 0.003, { pan: 0.75, verb: 0.3 });
+    const pos = this.doorPos;
+    this.tone(t, 0.12, 'sine', 160, 90, 0.4, 0.003, { pos, verb: 0.3 });
     for (let i = 0; i < n; i++) {
       s += 0.05 + Math.random() * (hard ? 0.06 : 0.1);
-      this.noise(s, 0.035, { type: 'bandpass', f: 3200 + Math.random() * 1500, q: 9 }, hard ? 0.35 : 0.25, 0.001, { pan: 0.75, verb: 0.3 });
-      this.tone(s, 0.03, 'square', 900 + Math.random() * 500, 800, 0.03, 0.001, { pan: 0.75 });
+      this.noise(s, 0.035, { type: 'bandpass', f: 3200 + Math.random() * 1500, q: 9 }, hard ? 0.5 : 0.35, 0.001, { pos, verb: 0.3 });
+      this.tone(s, 0.03, 'square', 900 + Math.random() * 500, 800, 0.04, 0.001, { pos });
     }
-    this.tone(s + 0.08, 0.15, 'sine', 150, 80, 0.3, 0.003, { pan: 0.75, verb: 0.3 });
+    this.tone(s + 0.08, 0.15, 'sine', 150, 80, 0.4, 0.003, { pos, verb: 0.3 });
   }
 
   knock(times = 3, loud = 1): void {
@@ -421,8 +458,8 @@ export class AudioEngine {
     const t = this.now;
     for (let i = 0; i < times; i++) {
       const s = t + i * 0.3;
-      this.tone(s, 0.16, 'sine', 125, 70, 0.55 * loud, 0.003, { pan: 0.75, verb: 0.4 });
-      this.noise(s, 0.07, { type: 'lowpass', f: 1100 }, 0.3 * loud, 0.002, { pan: 0.75, verb: 0.4 });
+      this.tone(s, 0.16, 'sine', 125, 70, 0.8 * loud, 0.003, { pos: this.doorPos, verb: 0.4 });
+      this.noise(s, 0.07, { type: 'lowpass', f: 1100 }, 0.45 * loud, 0.002, { pos: this.doorPos, verb: 0.4 });
     }
   }
 
@@ -670,7 +707,145 @@ export class AudioEngine {
     this.tone(t + 0.95, 0.12, 'sine', 1050, 1050, 0.05, 0.005, { pan: 0.6 });
   }
 
+  // ---------- v2: space, silence, panic ----------
+
+  setListener(p: Vec3, yaw: number): void {
+    if (!this.ctx) return;
+    const l = this.ctx.listener;
+    const fx = -Math.sin(yaw);
+    const fz = -Math.cos(yaw);
+    if (l.positionX) {
+      const t = this.ctx.currentTime;
+      l.positionX.setTargetAtTime(p.x, t, 0.02);
+      l.positionY.setTargetAtTime(p.y, t, 0.02);
+      l.positionZ.setTargetAtTime(p.z, t, 0.02);
+      l.forwardX.setTargetAtTime(fx, t, 0.02);
+      l.forwardY.setTargetAtTime(0, t, 0.02);
+      l.forwardZ.setTargetAtTime(fz, t, 0.02);
+      l.upX.value = 0;
+      l.upY.value = 1;
+      l.upZ.value = 0;
+    } else l.setPosition(p.x, p.y, p.z);
+  }
+
+  /** Muffle everything as noise (fear) rises: 0..100. */
+  setMuffle(noise: number): void {
+    if (!this.ctx) return;
+    const f = 18000 * Math.pow(0.12, Math.min(1, noise / 100));
+    this.muffle.frequency.setTargetAtTime(f, this.ctx.currentTime, 0.4);
+  }
+
+  /** Cut all sound for a moment (before the handle moves). */
+  silence(sec: number): void {
+    if (!this.mark('silence')) return;
+    const g = this.duckGain.gain;
+    const t = this.ctx!.currentTime;
+    g.cancelScheduledValues(t);
+    g.setTargetAtTime(0, t, 0.05);
+    g.setTargetAtTime(1, t + sec, 0.03);
+  }
+
+  /** A thin high whine (panic), 0..1. */
+  whine(level: number): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    if (!this.whineGain) {
+      const o = ctx.createOscillator();
+      o.frequency.value = 7600;
+      const o2 = ctx.createOscillator();
+      o2.frequency.value = 7640;
+      this.whineGain = ctx.createGain();
+      this.whineGain.gain.value = 0;
+      o.connect(this.whineGain);
+      o2.connect(this.whineGain);
+      this.whineGain.connect(this.dry);
+      o.start();
+      o2.start();
+    }
+    this.whineGain.gain.setTargetAtTime(Math.max(0, level) * 0.012, ctx.currentTime, 0.8);
+  }
+
+  /** Soft low drone at key beats, 0..1. */
+  drone(level: number): void {
+    if (!this.mark(level > 0 ? 'drone' : 'droneOff')) return;
+    const ctx = this.ctx!;
+    if (!this.droneGain) {
+      this.droneGain = ctx.createGain();
+      this.droneGain.gain.value = 0;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 220;
+      for (const f of [55, 82.4, 55.4]) {
+        const o = ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.value = f;
+        o.connect(lp);
+        o.start();
+      }
+      lp.connect(this.droneGain).connect(this.dry);
+    }
+    this.droneGain.gain.setTargetAtTime(level * 0.06, ctx.currentTime, 1.5);
+  }
+
+  /** A phone ringing in a backpack, positional, until stopped. */
+  ringtone(pos: Vec3 | null): void {
+    this.ring?.stop();
+    this.ring = null;
+    if (!pos) return;
+    if (!this.mark('ringtone')) return;
+    const ctx = this.ctx!;
+    const notes = [784, 988, 1175, 988, 784, 659];
+    let stopped = false;
+    let timer = 0;
+    const play = () => {
+      if (stopped) return;
+      const t = ctx.currentTime + 0.02;
+      notes.forEach((f, i) => this.tone(t + i * 0.16, 0.15, 'triangle', f, f, 0.3, 0.005, { pos }));
+      timer = window.setTimeout(play, 1400);
+    };
+    play();
+    this.ring = {
+      stop: () => {
+        stopped = true;
+        clearTimeout(timer);
+      },
+    };
+  }
+
+  /** Fake-out: a clank in the pipes. */
+  pipeKnock(): void {
+    if (!this.mark('pipeKnock')) return;
+    const t = this.now;
+    const pos = { x: -4.4, y: 2.6, z: -1 };
+    for (let i = 0; i < 3; i++) {
+      this.noise(t + i * 0.18, 0.12, { type: 'bandpass', f: 900, q: 6 }, 0.35, 0.002, { pos, verb: 0.6 });
+      this.tone(t + i * 0.18, 0.25, 'sine', 320, 300, 0.2, 0.002, { pos, verb: 0.6 });
+    }
+  }
+
+  /** Fake-out: a door slams somewhere far down the hall. */
+  farSlam(): void {
+    if (!this.mark('farSlam')) return;
+    const t = this.now;
+    const pos = { x: -9, y: 1, z: -6 };
+    this.tone(t, 0.4, 'sine', 80, 40, 0.5, 0.004, { pos, lowpass: 300, verb: 1 });
+    this.noise(t, 0.3, { type: 'lowpass', f: 600 }, 0.3, 0.003, { pos, verb: 1 });
+  }
+
+  /** Desk sliding: quiet when slow, a scrape when fast. */
+  deskSlide(fast: boolean): void {
+    if (!this.mark(fast ? 'deskScrape' : 'deskSlide')) return;
+    const t = this.now;
+    if (fast) {
+      this.tone(t, 0.6, 'sawtooth', 70, 160, 0.25, 0.02, { lowpass: 1000, verb: 0.4 });
+      this.noise(t, 0.6, { type: 'bandpass', f: 1500, q: 1.2 }, 0.25, 0.02, { verb: 0.4 });
+    } else this.noise(t, 0.5, { type: 'lowpass', f: 400 }, 0.04, 0.1);
+  }
+
   stopAll(): void {
+    this.ringtone(null);
+    this.whine(0);
+    if (this.droneGain && this.ctx) this.droneGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.3);
     this.mark('stopAll');
     this.hum?.stop();
     this.hum = null;

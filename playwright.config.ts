@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: 'tests/e2e',
-  timeout: 120_000,
+  timeout: 480_000,
   fullyParallel: false,
   workers: 1,
   reporter: [['list']],
@@ -14,8 +14,13 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop',
-      testIgnore: /mobile\.spec\.ts/,
-      use: { viewport: { width: 960, height: 540 }, deviceScaleFactor: 2 },
+      testIgnore: /(mobile|compare)\.spec\.ts/,
+      use: { viewport: { width: 960, height: 540 }, deviceScaleFactor: 1 },
+    },
+    {
+      name: 'compare',
+      testMatch: /compare\.spec\.ts/,
+      use: { viewport: { width: 405, height: 720 }, deviceScaleFactor: 2 },
     },
     {
       name: 'mobile',

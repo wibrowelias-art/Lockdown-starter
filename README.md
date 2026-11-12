@@ -1,107 +1,123 @@
-# Room 214 (working title: Lockdown): browser demo
+# Room 214 (working title: Lockdown): browser demo, v2
 
-A short first-person, choice-driven story. You are Noah, sitting a Biology final in
-Room 214 when the school goes into lockdown. Your friend Zoe is out with the hall pass,
-your classmate Theo freezes, and someone knocks on the door.
+A first-person, choice-driven story. You are Noah, sitting a Biology final in Room 214
+when the school goes into lockdown. Zoe, who you teased by text this morning, is out
+with the hall pass. Theo freezes. Then someone knocks, with Zoe's voice.
 
 > **Content notice:** school lockdown scenario; may be distressing. The person in the
-> hallway is never shown or described. There is no gore, no weapons, and no player
-> violence. Consequences come through sound, text messages and a short text epilogue.
-> **Exit** (top-right) and **Skip scene** are always on screen.
+> hallway is never shown, named or explained: only sound and a shadow of feet under the
+> door. No gore, no weapons, no bodies, no injuries on screen; the heaviest outcome is one
+> epilogue line. You can never fight or hurt anyone. **Exit** and **Skip scene** are always
+> on screen.
 
-This is the low-poly test build (Vite + TypeScript + Three.js + Web Audio). A realistic
-Unreal version only happens if the demo works. See `docs/DESIGN.md` and `docs/PROMPT.md`.
+Low-poly toon build (Vite + TypeScript + Three.js + Web Audio). A realistic Unreal version
+only happens if the demo works. Design docs: `docs/DESIGN.md`, `docs/PROMPT.md`, and for v2
+`docs/v2/` (prompt, video breakdown, reference frames; reference only, not shipped).
 
 ## Run it
 
 ```bash
 npm install
-npm run dev          # http://localhost:5173
-npm run build && npm run preview   # production build on http://localhost:4173
+npm run dev                         # http://localhost:5173
+npm run build && npm run preview    # production build on http://localhost:4173
 ```
 
-URL option: `?speed=4` runs story time 4x faster (used by the automated tests).
+URL options: `?speed=4` (story time 4x faster), `?lowq` (low quality), `?nolock` (no pointer
+lock: drag to look, click to use; used by the automated tests).
 
 ## Controls
 
-| | Keyboard / mouse | Touch |
+| | Keyboard / mouse (pointer lock) | Touch |
 |---|---|---|
-| Look | drag the view (or Left/Right arrows) | drag the view |
-| Use something | click it, or look at it and press **E** | tap it, or the **Use** button |
-| Move | WASD / arrows (Up/Down) | joystick (bottom-left) |
-| Crouch / stand | **C** | **Crouch** button |
-| Phone | **P** or the **Phone** button | **Phone** button |
-| Breathe with Theo | hold **Space** or the button | hold the button |
-| Mute | **M** or *Sound* button | *Sound* button |
+| Look | move the mouse (click the view once to capture it) | drag the view |
+| Pause / options | **Esc** releases the mouse and pauses; *Options* button | *Options* button |
+| Use | click, or **E** (hold E for heavy things) | tap the thing, or **Use** (hold) |
+| Move | **WASD** / arrows | joystick (bottom-left) |
+| Hurry | **Shift** (fast, and loud) | - |
+| Crouch / stand | **C** or **Ctrl** | **Crouch** |
+| Hold still / breathe / cover the screen | hold **Space** | hold **Hold** |
+| Phone | **Tab** (or P) | **Phone** |
+| Mute | **M** | Options |
 
-## The story (all original)
+**Options:** mouse sensitivity, invert Y, sound, and **Low quality** (turns off the ink
+outlines and bloom; on by default on touch devices).
 
-1. **Exam** (~90 s, Tuesday 10:42 AM). You're seated with your hands and answer sheet. Fill in bubbles 41-48.
-   Ms. Okafor (yellow sweater): *"Ten more minutes. Eyes on your own paper."* Theo (red sweater, next desk)
-   whispers for help on #44. Zoe (in front of you) borrows your eraser, then takes the hall pass.
-2. **The code.** Two muffled bangs. Theo: *"Somebody slammed a locker."* The PA announces the science fair has
-   moved to the gym. Theo: *"Science fair? That was last month."* Ms. Okafor: *"It's a code. Everybody down."*
-   You do the steps yourself: get away from the door, crouch, turn off the lights (switch by the door),
-   silence your phone (it keeps buzzing until you do). Theo is frozen in his seat; you can get him down.
-3. **Texts with Zoe.** She's hiding in the supply closet: *"noah im scared"*. Two rounds of 4 replies
-   (calm her / tell her to stay / tell her to come / say nothing).
-4. **Waiting.** Silence, breathing, sirens with red/blue light through the blinds, *"He's checking doors,"*
-   the handle rattles. Theo starts to panic; you can breathe with him.
-5. **The door.** Knocking: *"Noah? It's me. Let me in."* Ms. Okafor: *"We do not open that."*
-   Zoe texts: *"still in the closet. who's knocking??"* Choose **OPEN THE DOOR** or **KEEP IT LOCKED**.
+## Look
 
-### Hidden values
+Toon shading (3-step ramp) with ink outlines: inverted hulls on people and props, plus a
+depth+normal edge pass for the room. A fisheye lens pass (barrel distortion 0.3, about 100
+degrees wide), soft vignette, light film grain, and bloom only on the door window and strip,
+the EXIT sign, the PA rings and the siren light. Exam scenes are warm (beige walls, cream
+ceiling panels, blue-gray tiles, green board). The lockdown is navy with a pure-white door
+window and strip, and pink/blue sirens through the blinds. Panic scales with noise: the
+vignette tightens, the lens narrows a little, sound gets muffled, a thin whine fades in.
 
-| Value | Raised by | Lowered by |
+Side-by-sides with the reference frames: `docs/screenshots/compare/`.
+
+## Phases and tasks (24)
+
+| Phase | Tasks |
+|---|---|
+| 1 The final (10:42) | fill 4 bubbles; hold still while Ms. Okafor walks the aisle; look under the desks at Zoe's backpack |
+| 2 The code | look at the PA when it chimes; drop down (C) on "Everybody down!" |
+| 3 Lockdown (75 s, free order; checklist styled like the poster: 1 LOCK / 2 LIGHTS / 3 OUT OF SIGHT) | get to the wall beside the door (8 s scramble; Shift is faster but loud); pull Theo with you; close the blinds; cover the door window with the spare sheet; slide the spare desk against the door (hold E: slow is quiet, Shift is a scrape); find the ringing phone in a backpack by sound within 10 s; silence your phone; Ms. Okafor locks and kills the lights (slower and louder if you're in her way) |
+| 4 Zoe (the phone) | answer Zoe in 3 timed rounds; ask "which closet?" (a clue); text Mom (optional; late = noisy, never = she calls); cover the screen glow when footsteps pass (hold Space). Each phone check costs 1% battery (you start at 9%); at 0% you lose Zoe |
+| 5 The wait | hold still through 3 handle/feet-shadow beats (Space, mouse still); breathe with Theo in time with a ring; read the alert on Ms. Okafor's phone (a clue); answer Sam's whisper; stay down when the sirens come |
+| 6 The knock (10:52) | read the 10:52 text (a clue); choose OPEN THE DOOR / KEEP IT LOCKED, or SEND ONE LAST TEXT first (costs time while the voice pleads) |
+
+Fear is sound and uncertainty: 3D (HRTF) footsteps, rattles, knocks and the ringtone; two
+seconds of total silence before the handle moves; fake-outs (pipes, a far door, footsteps
+that stop and move on); a low drone only at key beats. Responders arrive and you walk out
+with your hands raised (hold Space).
+
+## State and endings (`src/story/state.ts`)
+
+Tracked: `noise` (0-100, never ends the game), `zoeTrust`, `helpedClassmate`, `theoCalm`
+(0-2), `tasks`, `clues` (testQuestion, schoolAlert, timing), `battery`, `zoeLost`,
+`momTexted`, `holdStill` (beats passed), the whisper choice and the final choice.
+
+| # | Ending | Condition |
 |---|---|---|
-| `zoeTrust` | eraser +1; replies: calm +2, stay +1, come +1 (round 2 "run for it" +0) | saying nothing -1 per round |
-| `noise` (0-100, shown as a meter) | phone buzz +12, chair scrape +9, each step while standing +1.5, Theo panicking +12, Ms. Okafor having to do a step for you +6..8 | nothing; it never causes a game over |
-| `helpedClassmate` | getting Theo down (scene 2) **or** breathing with him (scene 4) | |
+| 1 | Everyone Went Home | locked, trust >= 2, battery left, noise < 45, Theo helped, held still >= 2 of 3 |
+| 2 | Left on Read | locked, and trust < 2 or the phone died |
+| 3 | The Long Minute | locked, trust ok, but loud, or Theo not helped, or held still < 2 |
+| 4 | The Door Held | opened, and the desk barricade was up, or Theo was helped, or it was quiet |
+| 5 | The Open Door | opened, no barricade, Theo not helped, loud |
 
-### Endings (`src/story/state.ts` → `computeEnding`)
-
-| # | Ending | Condition | Outcome |
-|---|---|---|---|
-| 1 | Everyone Went Home | locked, trust ≥ 2, noise < 45, Theo helped | everyone safe |
-| 2 | Left on Read | locked, trust < 2 | everyone safe; Zoe went through it alone |
-| 3 | The Long Minute | locked, trust ≥ 2, noise ≥ 45 **or** Theo not helped | footsteps stop at your door; safe but shaken |
-| 4 | The Door Held | open, and (Theo helped **or** noise < 45) | the door choice costs Ms. Okafor a broken wrist |
-| 5 | The Open Door | open, Theo not helped, noise ≥ 45 | Theo runs out and is hurt off-screen (recovers) |
-
-Every ending finishes with: *"In a real lockdown, follow your school's plan and your teacher's
-instructions, keep phones silent, and call emergency services (911 in the US, 112 in Germany) when it is safe."*
+The epilogue always reveals the truth (Zoe never left the supply closet; the voice was not
+hers). Clues found change how sure Noah was; the mom text changes the last line. Every
+ending finishes with: *"In a real lockdown, follow your school's plan and your teacher's
+instructions, keep phones silent, and call emergency services (911 in the US, 112 in
+Germany) when it is safe."*
 
 ## Code map
 
 ```
-src/story/state.ts     pure state machine: scenes, hidden values, endings (unit-tested)
-src/story/endings.ts   ending sequences (sound cues, captions, texts) and epilogues
-src/game/director.ts   the five scene scripts + ending playback (cancellable, on sim time)
-src/game/game.ts       glue: renderer, loop, interaction, scene preparation, test hooks
-src/game/world.ts      Room 214: layout, furniture, door, switch, blinds, lights, sirens
-src/game/people.ts     low-poly characters with simple poses
-src/game/player.ts     first-person controller (seated / standing / crouched, collisions, footsteps)
-src/game/input.ts      keyboard, mouse-drag look, touch
-src/audio/audio.ts     all sound synthesised with Web Audio (no samples)
-src/ui/                overlays: notice, subtitles, objectives, noise meter, phone, choices, endings
-tests/unit/            Vitest: state machine, every ending reachable
-tests/e2e/             Playwright: one browser playthrough per ending, exit/skip, mobile touch
-docs/screenshots/      screenshots captured by the Playwright runs
+src/story/state.ts     state machine: phases, tasks, clues, battery, endings (unit-tested)
+src/story/endings.ts   ending sequences and epilogues
+src/game/director.ts   the six phase scripts + endings (cancellable, on sim time)
+src/game/game.ts       glue: loop, tasks, interaction, pause, phone, hold-still, test hooks
+src/game/render.ts     EffectComposer: edge pass, bloom, output, fisheye/vignette/grain
+src/game/toon.ts       toon materials, inverted-hull outlines
+src/game/world.ts      Room 214 layout, props, door + light strip + feet shadows, lights
+src/game/people.ts     cartoon characters (mouth flaps, trembling, poses)
+src/game/input.ts      pointer lock, keys, touch
+src/audio/audio.ts     Web Audio synthesis, HRTF panners, muffle, silence, whine, drone
+src/ui/                HUD, subtitles, phone, checklist, options, end screens
+tests/unit/            Vitest
+tests/e2e/             Playwright: one playthrough per ending, exit/skip/options, mobile, compare
 ```
 
 ## Tests
 
 ```bash
-npm test                 # Vitest: state machine
-npm run e2e              # Playwright (builds, serves on :4173, runs desktop + mobile projects)
+npm test          # Vitest (state machine)
+npm run e2e       # Playwright: desktop, mobile (Pixel 7) and compare (portrait) projects
 ```
-
-The Playwright runs use `?speed=12..14`, click real UI buttons, click 3D objects on the canvas
-(after turning the camera to them), and move with the real player controller.
 
 ## Not done / known limits
 
-- Dialogue is subtitles plus a quiet synthesised murmur; there are no recorded or TTS voices.
-- Sound design and pacing have only been checked by automated runs (which cues fired), not by ear.
-- Performance has only been measured in headless Chromium with software WebGL (~13 fps at 960x540),
-  not on real phones or GPUs.
+- Dialogue is subtitles plus a quiet synthesised murmur; no recorded or TTS voices.
+- Sound, pacing and fear have only been checked by automated runs (which cues fired), not by ear.
+- Frame rate was only measured in headless Chromium with software WebGL (SwiftShader), which is
+  far slower than a real GPU; it has not been measured on a laptop GPU or a phone.

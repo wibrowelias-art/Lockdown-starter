@@ -1,14 +1,29 @@
 import * as THREE from 'three';
 import { AudioEngine } from '../audio/audio';
-import { type EndingId, ENDING_IDS, NOISE_LABEL, type SceneId, Store, type StoryEvent, type StoryState } from '../story/state';
+import {
+  ALL_TASKS,
+  type EndingId,
+  ENDING_IDS,
+  NOISE_HIGH,
+  NOISE_LABEL,
+  type SceneId,
+  Store,
+  type StoryEvent,
+  type StoryState,
+  type TaskId,
+  cluesFound,
+  tasksDone,
+} from '../story/state';
 import { epilogue, type StageAction } from '../story/endings';
-import { UI, type Who } from '../ui/ui';
+import { type ChecklistItem, type Settings, UI, type Who } from '../ui/ui';
 import { Cancelled, Script, SimClock, Tweens, linear } from './clock';
-import { codeScene, doorScene, endingScene, examScene, textsScene, waitingScene } from './director';
+import { codeScene, doorScene, endingScene, examScene, lockdownScene, textsScene, waitingScene } from './director';
 import { Input } from './input';
 import type { Person, Pose } from './people';
 import { Player } from './player';
-import { AISLE_X, COLS, DOOR, HUDDLE, PLAYER_DESK, SAFE_Z, SWITCH_POS, World } from './world';
+import { Renderer } from './render';
+import { outline, toon } from './toon';
+import { AISLE_X, DOOR, HUDDLE, NOAH_WALL_SPOT, PA_POS, PLAYER_DESK, SEAT, SWITCH_POS, World, inDoorWallZone } from './world';
 
 interface Interactable {
   id: string;
@@ -27,6 +42,61 @@ interface Mover {
 }
 
 const FOUND_KEY = 'room214.endings';
+const SETTINGS_KEY = 'room214.settings';
+const PLAY_SCENES: SceneId[] = ['exam', 'code', 'lockdown', 'texts', 'waiting', 'door', 'ending'];
+
+const TASK_LABEL: Record<TaskId, string> = {
+  bubbles: 'Fill in 4 answers',
+  holdStillAisle: 'Hold still while Ms. Okafor walks by',
+  zoeBackpack: "Look under the desks: Zoe's backpack",
+  lookPA: 'Look at the PA speaker',
+  dropDown: 'Drop down (C) on "Everybody down!"',
+  wallByDoor: 'Get to the wall beside the door',
+  theoDown: 'Pull Theo down with you',
+  blinds: 'Close the blinds',
+  coverWindow: 'Cover the door window (spare sheet)',
+  barricade: 'Slide the spare desk to the door',
+  ringingPhone: 'Find the ringing phone',
+  silencePhone: 'Silence your phone (Tab)',
+  lockAndLights: 'Ms. Okafor: lock + lights',
+  zoeReplies: 'Answer Zoe (3 texts)',
+  testQuestion: 'Ask Zoe which closet',
+  textMom: 'Text Mom (optional)',
+  coverGlow: 'Cover the screen glow (Space)',
+  holdStill: 'Hold still (Space) when the handle moves',
+  breatheTheo: 'Breathe with Theo',
+  schoolAlert: "Read the alert on Ms. Okafor's phone",
+  whisper: 'Answer Sam',
+  stayDown: 'Stay down when the sirens come',
+  readTiming: 'Read the 10:52 text',
+  decide: 'Decide',
+};
+const LOCKDOWN_GROUPS: Partial<Record<TaskId, string>> = {
+  lockAndLights: '1 LOCK',
+  barricade: '1 LOCK',
+  coverWindow: '1 LOCK',
+  blinds: '2 LIGHTS',
+  silencePhone: '2 LIGHTS',
+  ringingPhone: '2 LIGHTS',
+  wallByDoor: '3 OUT OF SIGHT',
+  theoDown: '3 OUT OF SIGHT',
+};
+const PHASE_TITLE: Partial<Record<SceneId, string>> = {
+  exam: '1 · THE FINAL',
+  code: '2 · THE CODE',
+  lockdown: 'LOCKDOWN',
+  texts: '4 · ZOE',
+  waiting: '5 · THE WAIT',
+  door: '6 · THE KNOCK',
+};
+const PHASE_TASKS: Partial<Record<SceneId, TaskId[]>> = {
+  exam: ['bubbles', 'holdStillAisle', 'zoeBackpack'],
+  code: ['lookPA', 'dropDown'],
+  lockdown: ['lockAndLights', 'barricade', 'coverWindow', 'blinds', 'silencePhone', 'ringingPhone', 'wallByDoor', 'theoDown'],
+  texts: ['zoeReplies', 'testQuestion', 'textMom', 'coverGlow'],
+  waiting: ['holdStill', 'breatheTheo', 'schoolAlert', 'whisper', 'stayDown'],
+  door: ['readTiming', 'decide'],
+};
 
 export class Game {
   store = new Store();
@@ -35,59 +105,96 @@ export class Game {
   audio = new AudioEngine();
   world = new World();
   player = new Player();
-  camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.03, 60);
-  renderer: THREE.WebGLRenderer;
+  camera = new THREE.PerspectiveCamera(75, 16 / 9, 0.03, 60);
+  renderer: Renderer;
   input: Input;
   ui: UI;
-  flags = { eraserAsked: false, theoFrozen: false, theoNoticed: false, endShown: false, control: false };
-  breath = { active: false, holding: false, level: 0, wasFull: false, cycles: 0 };
+  settings: Settings;
+  flags = {
+    control: false,
+    endShown: false,
+    paused: false,
+    softUnlock: false,
+    theoFrozen: false,
+    theoFollowing: false,
+    holdingSheet: false,
+    ringing: null as string | null,
+    alertOn: false,
+    danger: false,
+    glowCaught: false,
+    paWindow: false,
+    dropWindow: false,
+    gazeBackpack: 0,
+    lockdownTimer: 0,
+    lockdownStart: 0,
+  };
+  breath = { active: false, holding: false, guide: 0, you: 0, sync: 0, cycles: 0, t: 0 };
+  hold: { active: boolean; t: number; dur: number; bad: number; ok: boolean; real?: number } = { active: false, t: 0, dur: 0, bad: 0, ok: true };
+  barricadeK = 0;
+  private barricadeFastSession = false;
   private script: Script | null = null;
   private movers: Mover[] = [];
   private interactables: Interactable[] = [];
   private raycaster = new THREE.Raycaster();
   private last = performance.now();
-  private flashlight = new THREE.SpotLight(0xe6eeff, 0, 14, 0.38, 0.6, 1.2);
+  private flashlight = new THREE.SpotLight(0xe6eeff, 0, 14, 0.4, 0.6, 1.2);
+  private raisedHands = new THREE.Group();
   frames = 0;
+  fps = 0;
+  private fpsAcc = { t: 0, n: 0 };
   private touchApplied = false;
+  private panic = 0;
+  private lastListUpdate = 0;
 
   constructor(
     private canvas: HTMLCanvasElement,
     host: HTMLElement,
     speed = 1,
+    opts: { noLock?: boolean; lowQuality?: boolean } = {},
   ) {
     this.clock.speed = speed;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.settings = this.loadSettings();
+    if (opts.lowQuality) this.settings.lowQuality = true;
+    this.renderer = new Renderer(canvas, this.world.scene, this.camera);
     this.world.scene.add(this.camera);
-    this.flashlight.position.set(DOOR.x + 0.6, 1.5, DOOR.z);
-    this.flashlight.target.position.set(0, 0.8, 0.5);
+    this.flashlight.position.set(DOOR.x, 1.5, DOOR.z - 0.6);
+    this.flashlight.target.position.set(DOOR.x - 0.5, 0.8, 0);
     this.world.scene.add(this.flashlight, this.flashlight.target);
+    this.buildRaisedHands();
 
-    this.input = new Input(canvas, {
-      onTap: (x, y) => this.tap(x, y),
-      onAction: (a) => this.action(a),
-      onHold: (down) => {
-        if (this.breath.active) this.breath.holding = down;
+    this.input = new Input(
+      canvas,
+      {
+        onTap: (x, y) => this.tap(x, y),
+        onAction: (a) => this.action(a),
+        onHold: (down) => this.setHold(down),
+        onLockChange: (locked) => this.lockChanged(locked),
+        wantsLock: () => PLAY_SCENES.includes(this.store.state.scene) && !this.flags.endShown,
       },
-    });
-    this.ui = new UI(host, this.clock, this.input);
+      !!opts.noLock,
+    );
+    this.ui = new UI(host, this.clock, this.input, this.settings);
     this.ui.onSkip = () => this.skip();
     this.ui.onExit = () => this.dispatch({ type: 'EXIT' });
-    this.ui.onMute = (m) => this.audio.setMuted(m);
-    this.ui.onBreathe = (down) => {
-      if (this.breath.active) this.breath.holding = down;
+    this.ui.onSettings = (s) => this.applySettings(s);
+    this.ui.onResume = () => this.resume();
+    this.ui.onHold = (d) => this.setHold(d);
+    this.ui.onUseHold = (d) => {
+      this.input.holdingUse = d;
+      if (d) this.action('use');
     };
     this.ui.phoneBtn.addEventListener('click', () => this.action('phone'));
     this.ui.crouchBtn.addEventListener('click', () => this.action('crouch'));
-    this.ui.useBtn.addEventListener('click', () => this.action('use'));
+    this.ui.onNeedsPointer = () => this.softUnlock();
+    this.ui.onPicked = () => this.relock();
+    this.ui.phone.onPicked = () => this.relock();
     this.ui.phone.onSilence = () => this.phoneSilenced();
     this.ui.phone.onClose = () => this.closePhone();
+    this.applySettings(this.settings);
 
-    this.player.onFootstep = () => {
+    this.player.onFootstep = (hurry) => {
       this.audio.footstepLocal();
-      this.dispatch({ type: 'NOISE', source: 'footstep' });
+      this.dispatch({ type: 'NOISE', source: hurry ? 'hurryStep' : 'footstep' });
     };
     this.player.onChairBump = (c) => {
       this.world.bumpChair(c, c.group.position.x - this.player.x, c.group.position.z - this.player.z);
@@ -98,16 +205,78 @@ export class Game {
 
     this.setupInteractables();
     this.store.subscribe((s, prev, e) => this.onState(s, prev, e));
-    window.addEventListener('resize', () => this.resize());
-    this.resize();
-    this.player.sitAt(PLAYER_DESK.x, PLAYER_DESK.z + 0.42);
+    window.addEventListener('resize', () => this.renderer.resize());
+    this.renderer.resize();
+    this.player.sitAt(SEAT.x, SEAT.z);
     this.ui.reset();
     this.showTitle();
     requestAnimationFrame(this.frame);
   }
 
   get touch(): boolean {
-    return this.input.usedTouch || window.matchMedia?.('(pointer: coarse)').matches;
+    return this.input.usedTouch || !!window.matchMedia?.('(pointer: coarse)').matches;
+  }
+
+  // ------------------------------------------------------------ settings, pause
+
+  private loadSettings(): Settings {
+    const coarse = !!window.matchMedia?.('(pointer: coarse)').matches;
+    const d: Settings = { sensitivity: 1, invertY: false, sound: true, lowQuality: coarse };
+    try {
+      return { ...d, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
+    } catch {
+      return d;
+    }
+  }
+
+  applySettings(s: Settings): void {
+    this.settings = s;
+    this.input.sensitivity = s.sensitivity;
+    this.input.invertY = s.invertY;
+    this.audio.setMuted(!s.sound);
+    this.renderer.setQuality(!s.lowQuality);
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** Release the mouse for on-screen buttons without pausing. */
+  softUnlock(): void {
+    if (!this.input.locked) return;
+    this.flags.softUnlock = true;
+    this.input.exitLock();
+  }
+
+  /** Capture the mouse again (works inside a click/key gesture). */
+  relock(): void {
+    if (this.input.lockMode && PLAY_SCENES.includes(this.store.state.scene) && !this.flags.endShown && !this.ui.phone.isOpen) this.input.requestLock();
+  }
+
+  private lockChanged(locked: boolean): void {
+    if (locked) {
+      this.flags.softUnlock = false;
+      this.setPaused(false);
+      return;
+    }
+    if (this.flags.softUnlock) return;
+    if (PLAY_SCENES.includes(this.store.state.scene) && !this.flags.endShown) this.setPaused(true);
+  }
+
+  setPaused(p: boolean): void {
+    this.flags.paused = p;
+    this.ui.pause(p && !this.ui.optionsOpen);
+    if (this.audio.ctx) {
+      if (p) void this.audio.ctx.suspend();
+      else void this.audio.ctx.resume();
+    }
+  }
+
+  private resume(): void {
+    this.ui.toggleOptions(false);
+    if (this.input.lockMode) this.input.requestLock();
+    else this.setPaused(false);
   }
 
   // ------------------------------------------------------------ story glue
@@ -116,14 +285,38 @@ export class Game {
     return this.store.dispatch(e);
   }
 
+  task(t: TaskId): void {
+    this.dispatch({ type: 'TASK', task: t });
+  }
+
   private onState(s: StoryState, prev: StoryState, e: StoryEvent): void {
     if (s.noise !== prev.noise) {
       const last = s.noiseLog[s.noiseLog.length - 1];
       this.ui.noise(s.noise, last ? `+ ${NOISE_LABEL[last.source]}` : undefined);
+      this.audio.setMuffle(s.noise * 0.8);
     }
-    if (s.scene === 'code' && this.flags.control) this.updateCodeObjectives();
-    if (s.scene === 'exam') this.updateExamObjectives();
+    if (s.battery !== prev.battery) this.ui.phone.setBattery(s.battery);
     if (s.scene !== prev.scene) this.runScene(s.scene, e);
+    else this.updateChecklist();
+  }
+
+  updateChecklist(): void {
+    const st = this.store.state;
+    const tasks = PHASE_TASKS[st.scene];
+    if (!tasks || this.flags.endShown) {
+      this.ui.checklist(null);
+      return;
+    }
+    const items: ChecklistItem[] = tasks.map((t) => ({
+      label: t === 'bubbles' ? `${TASK_LABEL[t]} (${Math.min(4, st.bubbles.length)}/4)` : t === 'holdStill' ? `${TASK_LABEL[t]} (${st.holdStill}/3)` : TASK_LABEL[t],
+      done: st.tasks[t],
+      missed: st.missed.includes(t),
+      optional: t === 'textMom' || t === 'testQuestion',
+      group: st.scene === 'lockdown' ? LOCKDOWN_GROUPS[t] : undefined,
+      testid: `task-${t}`,
+    }));
+    const timer = st.scene === 'lockdown' && this.flags.control ? 1 - (this.clock.time - this.flags.lockdownStart) / 75 : undefined;
+    this.ui.checklist(PHASE_TITLE[st.scene] ?? '', items, timer);
   }
 
   private runScene(scene: SceneId, e: StoryEvent): void {
@@ -133,22 +326,29 @@ export class Game {
     this.ui.clearDoorChoice();
     this.ui.prompt(null);
     this.ui.hint(null);
+    this.ui.holdMeter(null);
     this.stopBreathing();
+    this.hold.active = false;
     this.ui.phone.clearReplies();
     this.ui.phone.typing(false);
     this.closePhone();
+    this.audio.ringtone(null);
+    this.flags.ringing = null;
+    this.flags.danger = false;
     if (e.type === 'SKIP' || e.type === 'EXIT' || e.type === 'RESTART') this.ui.clearText();
     if (scene === 'title') return this.showTitle();
     if (scene === 'exited') return this.showExitScreen();
     const scripts: Partial<Record<SceneId, (g: Game, s: Script) => Promise<void>>> = {
       exam: examScene,
       code: codeScene,
+      lockdown: lockdownScene,
       texts: textsScene,
       waiting: waitingScene,
       door: doorScene,
       ending: endingScene,
     };
     const fn = scripts[scene];
+    this.updateChecklist();
     if (!fn) return;
     const s = new Script(this.clock);
     this.script = s;
@@ -183,61 +383,53 @@ export class Game {
     this.hardReset();
     this.ui.setHud(false);
     this.ui.setTopbar(false);
-    this.ui.fade(0.35, 0);
+    this.ui.fade(0.25, 0);
     this.ui.showTitle(
       this.foundEndings(),
       () => {
         this.audio.init();
         this.audio.resume();
+        this.audio.setMuted(!this.settings.sound);
         this.ui.hideScreen();
         this.ui.fade(1, 0);
+        this.input.requestLock();
         this.dispatch({ type: 'BEGIN' });
       },
       () => this.dispatch({ type: 'EXIT' }),
+      this.touch,
     );
   }
 
   private showExitScreen(): void {
     this.hardReset();
+    this.input.exitLock();
     this.audio.stopAll();
     this.ui.setHud(false);
     this.ui.setTopbar(false);
     this.ui.fade(0.6, 0.5);
     const from = this.store.state.exitedFrom;
-    const names: Partial<Record<SceneId, string>> = {
-      title: 'the content notice',
-      exam: 'the exam',
-      code: 'the code',
-      texts: 'texting Zoe',
-      waiting: 'the wait',
-      door: 'the door',
-      ending: 'the ending',
-    };
-    this.ui.showExit(from ? (names[from] ?? from) : null, () => this.dispatch({ type: 'RESTART' }));
+    this.ui.showExit(from, () => this.dispatch({ type: 'RESTART' }));
   }
 
   showEndingScreen(): void {
     if (this.flags.endShown) return;
     this.flags.endShown = true;
+    this.input.exitLock();
     const st = this.store.state;
     const id = st.ending ?? 'all_clear';
     const found = Array.from(new Set([...this.foundEndings(), id]));
     try {
       localStorage.setItem(FOUND_KEY, JSON.stringify(found));
     } catch {
-      /* private mode */
+      /* ignore */
     }
     this.audio.stopAll();
     this.ui.setHud(false);
     this.ui.setTopbar(true);
+    this.ui.checklist(null);
     this.ui.fade(1, 1);
-    this.ui.showEnding(
-      id,
-      epilogue(st),
-      found,
-      () => this.dispatch({ type: 'RESTART' }),
-      () => this.dispatch({ type: 'EXIT' }),
-    );
+    const stats = `Tasks done: ${tasksDone(st)} of ${ALL_TASKS.length} · Clues: ${cluesFound(st)} of 3 · Battery left: ${st.battery}% · Noise: ${Math.round(st.noise)}`;
+    this.ui.showEnding(id, epilogue(st), found, stats, () => this.dispatch({ type: 'RESTART' }), () => this.dispatch({ type: 'EXIT' }));
   }
 
   private hardReset(): void {
@@ -246,17 +438,43 @@ export class Game {
     this.clearMovers();
     this.tweens.clear();
     this.ui.reset();
-    this.flags = { eraserAsked: false, theoFrozen: false, theoNoticed: false, endShown: false, control: false };
-    this.breath = { active: false, holding: false, level: 0, wasFull: false, cycles: 0 };
+    this.flags = {
+      ...this.flags,
+      control: false,
+      endShown: false,
+      paused: false,
+      softUnlock: false,
+      theoFrozen: false,
+      theoFollowing: false,
+      holdingSheet: false,
+      ringing: null,
+      alertOn: false,
+      danger: false,
+      glowCaught: false,
+      paWindow: false,
+      dropWindow: false,
+      gazeBackpack: 0,
+    };
+    this.ui.pause(false);
+    this.breath = { active: false, holding: false, guide: 0, you: 0, sync: 0, cycles: 0, t: 0 };
+    this.hold = { active: false, t: 0, dur: 0, bad: 0, ok: true };
     this.input.reset();
     this.player.canMove = false;
+    this.raisedHands.visible = false;
+    this.panic = 0;
+    this.audio.ringtone(null);
   }
 
-  // ------------------------------------------------------------ helpers used by scenes
+  // ------------------------------------------------------------ helpers for scenes
 
   say(who: Who, text: string, opts: { whisper?: boolean; dur?: number } = {}): number {
     const d = this.ui.say(who, text, opts);
-    if (who !== 'noah') this.audio.voice(who, d * 0.8, opts.whisper);
+    const person = this.world.people.get(who);
+    if (person) person.say(d * 0.85);
+    const pos = person ? { x: person.root.position.x, y: 1.2, z: person.root.position.z } : undefined;
+    const kind = who === 'teacher' || who === 'theo' || who === 'zoe' || who === 'pa' || who === 'door' || who === 'officer' || who === 'noah' ? who : 'student';
+    if (who === 'pa') this.world.setPA(d);
+    this.audio.voice(kind, d * 0.8, opts.whisper, pos);
     return d;
   }
 
@@ -273,12 +491,10 @@ export class Game {
       return m.p !== p;
     });
     if (pose) p.setPose(pose);
-    return new Promise((resolve) => {
-      this.movers.push({ p, path: path.slice(), speed, done: resolve });
-    });
+    return new Promise((resolve) => this.movers.push({ p, path: path.slice(), speed, done: resolve }));
   }
 
-  private clearMovers(): void {
+  clearMovers(): void {
     const ms = this.movers;
     this.movers = [];
     ms.forEach((m) => {
@@ -319,19 +535,47 @@ export class Game {
     }
   }
 
-  everyoneLooksAtDoor(): void {
+  everyoneLooksAt(x: number, z: number): void {
     for (const p of this.world.people.values()) {
       if (!p.root.visible) continue;
-      const dx = DOOR.x - p.root.position.x;
-      const dz = DOOR.z - p.root.position.z;
-      const world = Math.atan2(-dx, -dz);
-      const rel = THREE.MathUtils.euclideanModulo(world - p.root.rotation.y + Math.PI, Math.PI * 2) - Math.PI;
+      const dx = x - p.root.position.x;
+      const dz = z - p.root.position.z;
+      const rel = THREE.MathUtils.euclideanModulo(Math.atan2(-dx, -dz) - p.root.rotation.y + Math.PI, Math.PI * 2) - Math.PI;
       p.headYaw = THREE.MathUtils.clamp(rel, -1.4, 1.4);
       p.headPitch = 0;
     }
   }
 
-  // ---------- scene preparation (idempotent; lets any scene be entered via Skip) ----------
+  everyoneLooksAtDoor(): void {
+    this.everyoneLooksAt(DOOR.x, DOOR.z);
+  }
+
+  /** Path for a person from wherever they are to their spot on the door wall. */
+  huddlePath(name: string): [number, number][] {
+    const p = this.world.people.get(name)!;
+    const [hx, hz] = HUDDLE[name];
+    const x = p.root.position.x;
+    const ax = x < -1.8 ? -1.8 : x < 0 ? 0 : x < 1.8 ? 1.8 : 3.75;
+    return [
+      [ax, p.root.position.z],
+      [ax, -3.3],
+      [hx, hz],
+    ];
+  }
+
+  sendToWall(name: string, speed = 1.0): Promise<void> {
+    const p = this.world.people.get(name)!;
+    const [, , f] = HUDDLE[name];
+    return this.walk(p, this.huddlePath(name), speed, name === 'teacher' ? 'crouch' : 'crouch').then(() => {
+      if (!['lockdown', 'texts', 'waiting', 'door'].includes(this.store.state.scene)) return;
+      p.root.rotation.y = f;
+      if (name === 'teacher') p.faceTowards(DOOR.x + 1, -2);
+      p.setPose(name === 'teacher' ? 'crouch' : 'floor');
+      p.headYaw = 0;
+    });
+  }
+
+  // ---------- scene preparation (idempotent; lets any phase be entered via Skip) ----------
 
   prepareExam(): void {
     this.clearMovers();
@@ -342,13 +586,18 @@ export class Game {
     w.sirenLevel = 0;
     w.setDoorAngle(0);
     w.door.cover.visible = false;
-    w.door.knob.rotation.x = 0;
+    w.door.knob.rotation.z = 0;
     w.sheet.reset();
-    w.eraser.visible = true;
-    w.eraser.position.set(PLAYER_DESK.x + 0.25, 0.748, PLAYER_DESK.z - 0.13);
+    w.spareSheet.visible = true;
     w.hands.visible = true;
+    w.setBlinds(0);
+    w.setBarricade(0);
+    w.setFeet(null);
+    w.setAlert(false);
+    w.handlePress = 0;
+    this.barricadeK = 0;
     this.flashlight.intensity = 0;
-    this.player.sitAt(PLAYER_DESK.x, PLAYER_DESK.z + 0.42);
+    this.player.sitAt(SEAT.x, SEAT.z);
     this.player.canMove = false;
     this.ui.setHud(true);
     this.ui.setTopbar(true);
@@ -362,142 +611,64 @@ export class Game {
   prepareCode(): void {
     this.clearMovers();
     this.ui.clearChoices();
-    this.ui.objectives(null);
     this.ui.hint(null);
-    this.flags.eraserAsked = false;
+    this.hold.active = false;
+    this.ui.holdMeter(null);
     const w = this.world;
-    w.zoe.root.visible = false;
-    w.zoe.setPose('sit', true);
-    w.setDoorAngle(0);
+    w.resetPeople();
     if (!w.lightsOn) w.setLights(true);
+    this.ui.noiseVisible(true);
+    this.ui.noise(this.store.state.noise);
   }
 
-  prepareLockdown(): void {
+  /** State after the lockdown steps: lights off, door locked, everyone on the door wall. */
+  prepareAfterLockdown(): void {
     this.clearMovers();
     this.ui.clearChoices();
-    this.ui.objectives(null);
     this.flags.control = false;
     this.flags.theoFrozen = false;
+    this.flags.theoFollowing = false;
     const w = this.world;
+    const st = this.store.state;
     if (w.lightsOn) {
       w.setLights(false);
       this.audio.fluorescentHum(false);
     }
     w.setDoorAngle(0);
-    w.door.cover.visible = true;
-    w.door.knob.rotation.x = Math.PI / 2;
-    w.zoe.root.visible = false;
+    w.door.knob.rotation.z = Math.PI / 2;
+    w.door.cover.visible = st.tasks.coverWindow;
+    w.setBarricade(st.tasks.barricade ? 1 : this.barricadeK);
+    w.setBlinds(1);
     w.hands.visible = false;
-    for (const [name, [x, z, f]] of Object.entries(HUDDLE)) {
+    for (const name of Object.keys(HUDDLE)) {
       const p = w.people.get(name);
       if (!p) continue;
+      const [x, z, f] = HUDDLE[name];
       p.walking = false;
       const far = Math.hypot(p.root.position.x - x, p.root.position.z - z) > 0.25;
       if (far) p.place(x, z, f);
       if (name === 'teacher') {
-        p.faceTowards(DOOR.x, DOOR.z);
+        p.faceTowards(DOOR.x + 1, -2);
         p.setPose('crouch', far);
       } else p.setPose('floor', far);
     }
     w.theo.tremble = Math.min(w.theo.tremble, 0.5);
     const pl = this.player;
-    if (pl.stance === 'seated' || pl.z < SAFE_Z - 0.3) {
-      pl.x = AISLE_X;
-      pl.z = 3.35;
+    const crowded = Object.values(HUDDLE).some(([x, z]) => Math.hypot(pl.x - x, pl.z - z) < 0.75);
+    if (pl.stance === 'seated' || !inDoorWallZone(pl.x, pl.z) || crowded) {
+      pl.x = NOAH_WALL_SPOT.x;
+      pl.z = NOAH_WALL_SPOT.z;
       pl.stance = 'crouch';
-      pl.yaw = 0;
-      pl.pitch = -0.05;
+      pl.lookAt(new THREE.Vector3(DOOR.x, 0.9, DOOR.z));
     }
     pl.canMove = false;
     this.ui.phone.silenced = true;
     this.ui.phone.renderRing();
     this.ui.noiseVisible(true);
-    this.ui.noise(this.store.state.noise);
+    this.ui.noise(st.noise);
     this.ui.setPhoneButton(true);
     this.ui.setMovement(false, this.touch);
     this.ui.setHud(true);
-  }
-
-  updateExamObjectives(): void {
-    if (this.store.state.scene !== 'exam') return;
-    const n = this.store.state.bubbles.length;
-    const items = [{ label: `Fill in your answers (${n}/8)`, done: n >= 8, testid: 'obj-bubbles' }];
-    if (this.flags.eraserAsked) items.push({ label: 'Pass Zoe your eraser (on your desk)', done: this.store.state.gaveEraser, testid: 'obj-eraser' });
-    this.ui.objectives(items);
-  }
-
-  updateCodeObjectives(): void {
-    const st = this.store.state.steps;
-    const items: { label: string; done: boolean; optional?: boolean; testid?: string }[] = [
-      { label: 'Get away from the door (back wall)', done: st.awayFromDoor, testid: 'obj-away' },
-      { label: this.touch ? 'Get low (Crouch)' : 'Get low (C)', done: st.crouched, testid: 'obj-crouch' },
-      { label: 'Lights off (switch by the door)', done: st.lightsOff, testid: 'obj-lights' },
-      { label: this.touch ? 'Silence your phone (Phone)' : 'Silence your phone (P)', done: st.phoneSilenced, testid: 'obj-phone' },
-    ];
-    if (this.flags.theoNoticed || this.store.state.theoHelp.pulledDown)
-      items.push({ label: 'Theo is frozen in his seat', done: this.store.state.theoHelp.pulledDown, optional: true, testid: 'obj-theo' });
-    this.ui.objectives(items);
-  }
-
-  moveClassToBackWall(): void {
-    const aisleFor = (x: number) => (x < COLS[0] + 0.1 ? -1.8 : x < COLS[1] + 0.1 ? 0 : x < COLS[2] + 0.1 ? 1.8 : 3.75);
-    let i = 0;
-    for (const [name, p] of this.world.people) {
-      if (!name.startsWith('f')) continue;
-      const [hx, hz, hf] = HUDDLE[name];
-      const ax = aisleFor(p.root.position.x);
-      const z = p.root.position.z;
-      this.clock.after(0.2 + (i++ % 6) * 0.25, () => {
-        if (this.store.state.scene !== 'code') return;
-        p.tremble = 0.5;
-        void this.walk(p, [[ax, z], [ax, hz - 0.6], [hx, hz]], 0.95, 'crouch').then(() => {
-          if (this.store.state.scene === 'code' || this.store.state.scene === 'texts') {
-            p.root.rotation.y = hf;
-            p.setPose('floor');
-            p.headYaw = 0;
-          }
-        });
-      });
-    }
-  }
-
-  sendTheoToBackWall(): Promise<void> {
-    const t = this.world.theo;
-    this.flags.theoFrozen = false;
-    t.tremble = 0.6;
-    const [hx, hz, hf] = HUDDLE.theo;
-    return this.walk(t, [[3.75, t.root.position.z], [3.75, 2.2], [hx, hz]], 1.0, 'crouch').then(() => {
-      if (this.store.state.scene === 'code' || this.store.state.scene === 'texts') {
-        t.root.rotation.y = hf;
-        t.setPose('floor');
-      }
-    });
-  }
-
-  beginLockdownControl(): void {
-    this.flags.control = true;
-    this.player.canMove = true;
-    this.ui.setMovement(true, this.touch);
-    this.ui.setPhoneButton(true);
-    this.ui.phone.setCanClose(true);
-    this.ui.noiseVisible(true);
-    this.ui.noise(this.store.state.noise);
-    this.updateCodeObjectives();
-    this.clock.after(6, () => {
-      if (this.store.state.scene === 'code' && !this.store.state.theoHelp.pulledDown) {
-        this.flags.theoNoticed = true;
-        this.updateCodeObjectives();
-      }
-    });
-  }
-
-  endLockdownControl(): void {
-    this.flags.control = false;
-    this.player.canMove = false;
-    this.player.autoTarget = null;
-    this.ui.setMovement(false, this.touch);
-    this.ui.objectives(null);
-    this.closePhone();
   }
 
   allowCrouchedMovement(): void {
@@ -505,14 +676,53 @@ export class Game {
     this.ui.setMovement(true, this.touch);
   }
 
-  allLockdownStepsDone(): boolean {
-    const s = this.store.state.steps;
-    return s.awayFromDoor && s.crouched && s.lightsOff && s.phoneSilenced;
+  leaveSeat(stance: 'stand' | 'crouch'): void {
+    const p = this.player;
+    if (p.stance !== 'seated') return;
+    p.stance = stance;
+    this.world.hands.visible = false;
+    const sx = p.x;
+    const sz = p.z;
+    const tx = AISLE_X - 0.05;
+    const tz = PLAYER_DESK.z + 0.35;
+    void this.tweens.run(0.35, (k) => {
+      p.x = sx + (tx - sx) * k;
+      p.z = sz + (tz - sz) * k;
+    });
+    p.pitch = Math.max(p.pitch, -0.3);
+  }
+
+  // ---------- lockdown mechanics ----------
+
+  beginLockdownControl(): void {
+    this.flags.control = true;
+    this.flags.lockdownStart = this.clock.time;
+    this.player.canMove = true;
+    if (this.player.stance === 'seated') this.leaveSeat('crouch');
+    this.ui.setMovement(true, this.touch);
+    this.ui.setPhoneButton(true);
+    this.ui.phone.setCanClose(true);
+    this.ui.noiseVisible(true);
+    this.updateChecklist();
+  }
+
+  endLockdownControl(): void {
+    this.flags.control = false;
+    this.player.canMove = false;
+    this.player.autoTarget = null;
+    this.ui.setMovement(false, this.touch);
+    this.closePhone();
+  }
+
+  lockdownPlayerTasksDone(): boolean {
+    const t = this.store.state.tasks;
+    return t.wallByDoor && t.theoDown && t.blinds && t.coverWindow && t.barricade && t.silencePhone && (t.ringingPhone || this.store.state.missed.includes('ringingPhone')) && t.lockAndLights;
   }
 
   phoneBuzz([from, text]: string[]): void {
     this.audio.phoneBuzz();
     this.ui.phone.notify(from, text);
+    this.ui.phone.addMsg('mom', text, { silent: true, thread: 'mom' });
     this.ui.phone.flash();
     this.ui.setPhoneButton(true, true);
     this.ui.caption('[your phone buzzes in your pocket. Loud.]', 2.5);
@@ -524,10 +734,26 @@ export class Game {
   private phoneSilenced(): void {
     this.audio.phoneTap();
     this.ui.setPhoneButton(true, false);
-    if (this.store.state.scene === 'code') this.dispatch({ type: 'STEP', step: 'phoneSilenced' });
+    this.task('silencePhone');
     this.clock.after(0.9, () => {
-      if (this.store.state.scene === 'code') this.closePhone();
+      if (this.store.state.scene === 'lockdown') this.closePhone();
     });
+  }
+
+  startRinging(id: string): void {
+    const pack = this.world.backpacks.find((b) => b.id === id);
+    if (!pack) return;
+    pack.ringing = true;
+    this.flags.ringing = id;
+    const p = pack.mesh.position;
+    this.audio.ringtone({ x: p.x, y: 0.3, z: p.z });
+    this.ui.caption("[a phone starts ringing. Someone's backpack.]", 3);
+  }
+
+  stopRinging(): void {
+    this.world.backpacks.forEach((b) => (b.ringing = false));
+    this.flags.ringing = null;
+    this.audio.ringtone(null);
   }
 
   turnLightsOff(): void {
@@ -535,125 +761,170 @@ export class Game {
     this.world.setLights(false);
     this.audio.lightSwitch();
     this.audio.fluorescentHum(false);
-    this.ui.caption('[click. The hum of the lights stops.]', 2.5);
-    if (this.store.state.scene === 'code') this.dispatch({ type: 'STEP', step: 'lightsOff' });
+    this.ui.caption('[click. The room goes dark blue.]', 2.5);
   }
 
-  async pullPlayerToBackWall(): Promise<void> {
+  async pullPlayerToWall(): Promise<void> {
     this.ui.fade(0.9, 0.4);
     await new Promise<void>((r) => this.clock.after(0.5, r));
     const p = this.player;
-    p.x = AISLE_X;
-    p.z = 3.35;
+    p.x = NOAH_WALL_SPOT.x;
+    p.z = NOAH_WALL_SPOT.z;
     p.stance = 'crouch';
     this.world.hands.visible = false;
-    p.lookAt(new THREE.Vector3(DOOR.x, 1, DOOR.z));
+    p.lookAt(new THREE.Vector3(DOOR.x, 0.9, DOOR.z));
     this.ui.fade(0, 0.6);
   }
 
-  openPhone(mode: 'lock' | 'chat', canClose: boolean): void {
+  // ---------- phone ----------
+
+  /** Opening the phone costs 1% battery. At 0% the screen stays black. */
+  openPhone(mode: 'lock' | 'chat', canClose: boolean, free = false): boolean {
+    if (this.ui.phone.isOpen) return true;
+    const st = this.store.state;
+    if (st.battery <= 0) {
+      this.ui.caption('[your phone is dead. The screen stays black.]', 3);
+      return false;
+    }
+    if (!free) this.dispatch({ type: 'PHONE_CHECK' });
     this.ui.phone.setCanClose(canClose);
     this.ui.phone.open(mode);
+    this.softUnlock();
     this.ui.setPhoneButton(true, false);
+    return true;
   }
 
   closePhone(): void {
+    const was = this.ui.phone.isOpen;
     this.ui.phone.close();
+    if (was) this.relock();
   }
 
   private togglePhone(): void {
     const scene = this.store.state.scene;
     const ph = this.ui.phone;
-    if (scene === 'exam') {
+    if (scene === 'exam' || scene === 'code') {
       this.ui.caption("[your phone stays in your pocket. It's a final.]", 2.5);
       return;
     }
-    if (!['code', 'texts', 'waiting', 'door'].includes(scene)) return;
+    if (!['lockdown', 'texts', 'waiting', 'door'].includes(scene)) return;
     if (ph.isOpen) {
       if (ph.canClose) this.closePhone();
       return;
     }
-    if (scene === 'code') this.openPhone('lock', true);
-    else if (scene === 'texts') this.openPhone('chat', false);
-    else this.openPhone('chat', true);
+    this.openPhone(scene === 'lockdown' && !ph.silenced ? 'lock' : 'chat', true);
   }
 
+  private setHold(down: boolean): void {
+    this.breath.holding = down;
+    if (this.ui.phone.isOpen) this.ui.phone.setCovered(down);
+    if (down && this.ui.phone.isOpen && this.flags.danger) this.task('coverGlow');
+  }
+
+  get holdingStill(): boolean {
+    return this.input.holdingSpace || this.breath.holding;
+  }
+
+  // ---------- hold still ----------
+
+  /** A hold-still beat: hold Space, keep the mouse and feet still. Resolves passed/failed. */
+  async holdStill(s: Script, dur: number, label: string): Promise<boolean> {
+    this.hold = { active: true, t: 0, dur, bad: 0, ok: true };
+    this.ui.hint(this.touch ? 'HOLD the Hold button. Don’t move.' : 'Hold Space. Don’t move the mouse.');
+    await s.until(() => !this.hold.active, dur + 2);
+    this.ui.hint(null);
+    this.ui.holdMeter(null);
+    const passed = this.hold.bad < 0.5;
+    this.hold.active = false;
+    void label;
+    return passed;
+  }
+
+  /** dt = sim time (beat length), realDt = real time (how long you actually moved). */
+  private updateHold(dt: number, realDt: number): void {
+    const h = this.hold;
+    if (!h.active) return;
+    h.t += dt;
+    h.real = (h.real ?? 0) + realDt;
+    const moving = this.input.lastLookPx > 6 || this.player.speed > 0.05 || !this.holdingStill;
+    if (moving && h.real > 1.0) h.bad += realDt;
+    h.ok = !moving;
+    this.ui.holdMeter({ progress: Math.min(1, h.t / h.dur), sub: h.ok ? 'still...' : this.holdingStill ? 'you moved!' : 'hold Space', ok: h.ok });
+    if (h.t >= h.dur) h.active = false;
+  }
+
+  // ---------- breathe with Theo (hold in time with the ring) ----------
+
   startBreathing(): void {
-    this.breath = { active: true, holding: false, level: 0, wasFull: false, cycles: 0 };
-    this.ui.breathe({ progress: 0, label: 'Hold to breathe in  (0/3)' });
+    this.breath = { active: true, holding: this.breath.holding, guide: 0, you: 0, sync: 0, cycles: 0, t: 0 };
   }
 
   stopBreathing(): void {
     this.breath.active = false;
-    this.breath.holding = false;
     this.ui.breathe(null);
   }
 
   private updateBreath(dt: number): void {
     const b = this.breath;
     if (!b.active) return;
-    const rate = 1 / 2.2;
-    b.level = THREE.MathUtils.clamp(b.level + (b.holding ? rate : -rate) * dt, 0, 1);
-    if (b.level >= 0.97) b.wasFull = true;
-    if (b.wasFull && b.level <= 0.05) {
-      b.cycles++;
-      b.wasFull = false;
-      this.world.theo.tremble = Math.max(0.3, 1.6 - b.cycles * 0.45);
-      this.audio.breathing(1.2 - b.cycles * 0.15, Math.max(0.28, 0.6 - b.cycles * 0.1));
-    }
-    let label: string;
-    if (b.holding) label = b.level >= 0.97 ? 'Hold... now let go' : 'Breathe in...';
-    else if (b.wasFull) label = 'And out, slowly...';
-    else label = b.cycles ? 'Again' : 'Hold to breathe in';
-    this.ui.breathe({ progress: b.level, label: `${label}  (${b.cycles}/3)` });
+    const holding = b.holding || this.input.holdingSpace;
+    b.t += dt;
+    const period = 5;
+    const ph = (b.t % period) / period;
+    b.guide = ph < 0.5 ? ph * 2 : 2 - ph * 2;
+    b.you = THREE.MathUtils.clamp(b.you + (holding ? 1 : -1) * dt / 2.5, 0, 1);
+    if (Math.abs(b.you - b.guide) < 0.22) b.sync += dt;
+    b.cycles = Math.floor(b.sync / period);
+    this.world.theo.tremble = Math.max(0.3, 1.6 - b.cycles * 0.45);
+    this.ui.breathe({ guide: b.guide, you: b.you, label: `${ph < 0.5 ? 'In...' : 'Out...'}  in step: ${b.cycles}/3` });
   }
+
+  // ---------- door ----------
 
   async walkPlayerToDoor(): Promise<void> {
     const p = this.player;
     p.stance = 'stand';
-    const pts: [number, number][] = [
-      [3.3, 2.0],
-      [3.3, -2.35],
-    ];
-    for (const [tx, tz] of pts) {
-      const sx = p.x;
-      const sz = p.z;
-      const d = Math.hypot(tx - sx, tz - sz);
-      const yaw0 = p.yaw;
-      const yaw1 = Math.atan2(-(tx - sx), -(tz - sz));
-      const dy = THREE.MathUtils.euclideanModulo(yaw1 - yaw0 + Math.PI, Math.PI * 2) - Math.PI;
-      let stepAcc = 0;
-      let lastK = 0;
-      await this.tweens.run(
-        d / 1.6,
-        (k) => {
-          p.x = sx + (tx - sx) * k;
-          p.z = sz + (tz - sz) * k;
-          p.yaw = yaw0 + dy * Math.min(1, k * 3);
-          p.pitch *= 0.9;
-          stepAcc += (k - lastK) * d;
-          lastK = k;
-          if (stepAcc > 0.7) {
-            stepAcc = 0;
-            this.audio.footstepLocal();
-          }
-        },
-        linear,
-      );
+    const target: [number, number] = [DOOR.x - 0.35, DOOR.z + 0.85];
+    const sx = p.x;
+    const sz = p.z;
+    const d = Math.hypot(target[0] - sx, target[1] - sz);
+    await this.tweens.run(Math.max(0.6, d / 1.4), (k) => {
+      p.x = sx + (target[0] - sx) * k;
+      p.z = sz + (target[1] - sz) * k;
+    }, linear);
+    if (this.store.state.tasks.barricade) {
+      this.audio.deskSlide(true);
+      await this.tweens.run(1.2, (k) => this.world.setBarricade(1 - k * 0.6));
     }
-    const target = new THREE.Vector3(DOOR.x, 1.1, DOOR.z + 0.3);
-    const yaw0 = p.yaw;
-    const pitch0 = p.pitch;
     const look = new Player();
     look.x = p.x;
     look.z = p.z;
     look.eye = 1.62;
     look.stance = 'stand';
-    look.lookAt(target);
+    look.lookAt(new THREE.Vector3(DOOR.x, 1.1, DOOR.z));
+    const y0 = p.yaw;
+    const p0 = p.pitch;
     await this.tweens.run(0.5, (k) => {
-      p.yaw = yaw0 + (THREE.MathUtils.euclideanModulo(look.yaw - yaw0 + Math.PI, Math.PI * 2) - Math.PI) * k;
-      p.pitch = pitch0 + (look.pitch - pitch0) * k;
+      p.yaw = y0 + (THREE.MathUtils.euclideanModulo(look.yaw - y0 + Math.PI, Math.PI * 2) - Math.PI) * k;
+      p.pitch = p0 + (look.pitch - p0) * k;
     });
+  }
+
+  private buildRaisedHands(): void {
+    for (const sx of [-1, 1]) {
+      const h = new THREE.Group();
+      const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.3, 4, 10), toon(0x7a7f8f));
+      arm.position.y = -0.18;
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.065, 12, 10), toon(0xf0c09a));
+      hand.scale.set(1, 1.2, 0.6);
+      h.add(arm, hand);
+      outline(h, 0.006);
+      h.position.set(sx * 0.32, 0.02, -0.5);
+      h.rotation.z = -sx * 0.2;
+      this.raisedHands.add(h);
+    }
+    this.raisedHands.visible = false;
+    this.camera.add(this.raisedHands);
   }
 
   async stageAction(a: StageAction, s: Script): Promise<void> {
@@ -665,7 +936,6 @@ export class Game {
       case 'slamDoor': {
         const from = w.door.angle;
         void this.tweens.run(0.15, (k) => w.setDoorAngle(from * (1 - k)), linear, w.door);
-        w.door.knob.rotation.x = Math.PI / 2;
         this.player.sway = 4;
         this.clock.after(1, () => (this.player.sway = 0.5));
         return;
@@ -674,17 +944,44 @@ export class Game {
         const t = w.theo;
         t.tremble = 0;
         t.setPose('stand');
-        void this.walk(t, [[3.2, t.root.position.z - 0.6], [3.7, -2.5], [DOOR.x - 0.3, DOOR.z], [DOOR.x + 1.4, DOOR.z]], 4.6).then(() => {
-          t.root.visible = false;
-        });
+        void this.walk(t, [[DOOR.x + 0.2, DOOR.z + 0.6], [DOOR.x + 0.2, DOOR.z - 1.5]], 4.2).then(() => (t.root.visible = false));
+        return;
+      }
+      case 'feetShadows': {
+        void this.tweens.run(2.5, (k) => w.setFeet(DOOR.x - 0.9 + k * 0.9), linear);
+        this.clock.after(9, () => w.setFeet(null));
         return;
       }
       case 'policeEnter': {
         const from = w.door.angle;
-        (w.hallLight.material as THREE.MeshBasicMaterial).color.set(0xffffff);
+        w.setBarricade(0);
         void this.tweens.run(1.2, (k) => w.setDoorAngle(from + (1.35 - from) * k), undefined, w.door);
         await s.wait(0.4);
-        void this.tweens.run(1.5, (k) => (this.flashlight.intensity = k * 22));
+        void this.tweens.run(1.5, (k) => (this.flashlight.intensity = k * 18));
+        return;
+      }
+      case 'walkOut': {
+        this.ui.hint(this.touch ? 'Raise your hands: hold the Hold button' : 'Raise your hands: hold Space');
+        this.ui.setMovement(false, this.touch);
+        const ok = await s.until(() => this.holdingStill, 12);
+        this.ui.hint(null);
+        this.raisedHands.visible = true;
+        this.ui.caption(ok ? '[you raise your hands and walk out, slowly]' : '[an officer guides you out, hands up]', 4);
+        const p = this.player;
+        p.stance = 'stand';
+        const sx = p.x;
+        const sz = p.z;
+        const tx = DOOR.x;
+        const tz = DOOR.z - 0.6;
+        const yaw0 = p.yaw;
+        const yaw1 = Math.atan2(-(tx - sx), -(tz - sz));
+        const dy = THREE.MathUtils.euclideanModulo(yaw1 - yaw0 + Math.PI, Math.PI * 2) - Math.PI;
+        await this.tweens.run(3.2, (k) => {
+          p.x = sx + (tx - sx) * k;
+          p.z = sz + (tz - sz) * k;
+          p.yaw = yaw0 + dy * Math.min(1, k * 2);
+          p.pitch *= 0.9;
+        }, linear);
         return;
       }
       case 'fadeOut':
@@ -692,6 +989,7 @@ export class Game {
         this.audio.sirens(0, 2.5);
         this.audio.breathing(0);
         this.audio.heartbeat(false);
+        this.audio.drone(0);
         return;
     }
   }
@@ -701,6 +999,7 @@ export class Game {
   private setupInteractables(): void {
     const w = this.world;
     const scene = () => this.store.state.scene;
+    const lockdown = () => scene() === 'lockdown' && this.flags.control;
     this.interactables = [
       {
         id: 'sheet',
@@ -719,38 +1018,97 @@ export class Game {
         },
       },
       {
-        id: 'eraser',
-        objects: () => [w.eraser],
-        range: 1.3,
-        enabled: () => scene() === 'exam' && this.flags.eraserAsked && !this.store.state.gaveEraser && w.eraser.visible,
-        label: () => 'Pass Zoe your eraser',
-        use: () => {
-          this.giveEraser();
-          return true;
-        },
-      },
-      {
-        id: 'switch',
-        objects: () => [w.switchPlate],
-        range: 1.6,
-        enabled: () => scene() === 'code' && this.flags.control && w.lightsOn,
-        label: () => 'Turn off the lights',
-        use: () => {
-          this.turnLightsOff();
-          return true;
-        },
-      },
-      {
         id: 'theo',
         objects: () => w.theo.pickables,
-        range: 2.0,
-        enabled: () => scene() === 'code' && this.flags.control && this.flags.theoFrozen && !this.store.state.theoHelp.pulledDown,
-        label: () => 'Get Theo down',
+        range: 1.8,
+        enabled: () => lockdown() && this.flags.theoFrozen && !this.flags.theoFollowing,
+        label: () => 'Pull Theo with you',
         use: () => {
-          this.dispatch({ type: 'HELP_THEO', how: 'pulledDown' });
-          this.say('noah', 'Theo. Hey. Get down. Come on.', { whisper: true });
+          this.flags.theoFollowing = true;
+          this.flags.theoFrozen = false;
+          this.say('noah', 'Theo. Hey. With me. Come on.', { whisper: true });
           this.clock.after(1.2, () => this.say('theo', '...Okay. Okay.', { whisper: true }));
-          void this.sendTheoToBackWall();
+          w.theo.setPose('crouch');
+          return true;
+        },
+      },
+      {
+        id: 'blinds',
+        objects: () => [w.blindsCord],
+        range: 1.6,
+        enabled: () => lockdown() && !this.store.state.tasks.blinds,
+        label: () => 'Close the blinds',
+        use: () => {
+          this.audio.rustle();
+          void this.tweens.run(1.2, (k) => w.setBlinds(k));
+          this.task('blinds');
+          return true;
+        },
+      },
+      {
+        id: 'spareSheet',
+        objects: () => [w.spareSheet],
+        range: 1.4,
+        enabled: () => lockdown() && w.spareSheet.visible && !this.flags.holdingSheet,
+        label: () => 'Take the spare sheet',
+        use: () => {
+          w.spareSheet.visible = false;
+          this.flags.holdingSheet = true;
+          this.audio.rustle();
+          this.ui.caption('[you take the spare answer sheet]', 2);
+          return true;
+        },
+      },
+      {
+        id: 'doorWindow',
+        objects: () => [w.door.window],
+        range: 1.6,
+        enabled: () => lockdown() && this.flags.holdingSheet && !this.store.state.tasks.coverWindow,
+        label: () => 'Cover the door window',
+        use: () => {
+          w.door.cover.visible = true;
+          this.flags.holdingSheet = false;
+          this.audio.rustle();
+          this.task('coverWindow');
+          return true;
+        },
+      },
+      {
+        id: 'barricade',
+        objects: () => [w.barricade],
+        range: 1.6,
+        enabled: () => lockdown() && !this.store.state.tasks.barricade,
+        label: () => (this.touch ? 'Hold Use: slide the desk to the door' : 'Hold E: slide the desk (Shift: faster, loud)'),
+        use: () => true,
+      },
+      ...w.backpacks.map(
+        (b): Interactable => ({
+          id: `pack:${b.id}`,
+          objects: () => [b.mesh],
+          range: 1.5,
+          enabled: () => lockdown() && this.flags.ringing !== null && !this.store.state.tasks.ringingPhone,
+          label: () => 'Check the backpack',
+          use: () => {
+            this.audio.rustle();
+            if (b.ringing) {
+              this.stopRinging();
+              this.task('ringingPhone');
+              this.say('malik', "That's mine. Sorry. Sorry.", { whisper: true });
+            } else this.ui.caption('[not this one]', 1.5);
+            return true;
+          },
+        }),
+      ),
+      {
+        id: 'alert',
+        objects: () => [w.teacherPhone],
+        range: 2.4,
+        enabled: () => scene() === 'waiting' && this.flags.alertOn && !this.store.state.tasks.schoolAlert,
+        label: () => 'Read the alert over her shoulder',
+        use: () => {
+          this.task('schoolAlert');
+          this.ui.phone.banner('DISTRICT ALERT', 'Lockdown in effect. Do not open doors for anyone. Police will unlock rooms with keys.', '10:50', 'DO NOT OPEN DOORS');
+          this.ui.caption('[you read it over her shoulder]', 3);
           return true;
         },
       },
@@ -769,27 +1127,15 @@ export class Game {
     this.dispatch({ type: 'FILL_BUBBLE', index: row });
   }
 
-  giveEraser(): void {
-    const w = this.world;
-    this.dispatch({ type: 'GIVE_ERASER' });
-    this.audio.rustle();
-    const from = w.eraser.position.clone();
-    const to = new THREE.Vector3(w.zoe.root.position.x + 0.15, 0.95, w.zoe.root.position.z + 0.25);
-    void this.tweens.run(0.6, (k) => {
-      w.eraser.position.lerpVectors(from, to, k);
-      w.eraser.position.y += Math.sin(k * Math.PI) * 0.15;
-    }).then(() => (w.eraser.visible = false));
-  }
-
   private pick(clientX: number, clientY: number): { it: Interactable; hit: THREE.Intersection } | null {
     const r = this.canvas.getBoundingClientRect();
     const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
+    this.raycaster.layers.set(0);
     let best: { it: Interactable; hit: THREE.Intersection } | null = null;
     for (const it of this.interactables) {
       if (!it.enabled()) continue;
-      const hits = this.raycaster.intersectObjects(it.objects(), true);
-      const h = hits[0];
+      const h = this.raycaster.intersectObjects(it.objects(), true)[0];
       if (h && h.distance <= it.range && (!best || h.distance < best.hit.distance)) best = { it, hit: h };
     }
     return best;
@@ -800,31 +1146,51 @@ export class Game {
     return this.pick(r.left + r.width / 2, r.top + r.height / 2);
   }
 
+  /** Is the crosshair on this object (ignoring range)? */
+  gazing(obj: THREE.Object3D, maxDist = 12): boolean {
+    this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    const h = this.raycaster.intersectObject(obj, true)[0];
+    return !!h && h.distance < maxDist;
+  }
+
   private tap(x: number, y: number): void {
-    if (this.ui.phone.isOpen) return;
+    if (this.ui.phone.isOpen || this.flags.paused) return;
     const t = this.pick(x, y);
     if (t) t.it.use(t.hit);
   }
 
-  private action(a: 'crouch' | 'use' | 'phone' | 'escape' | 'mute'): void {
+  private action(a: 'crouch' | 'use' | 'phone' | 'escape' | 'mute' | 'useDown' | 'useUp'): void {
+    if (this.flags.paused && a !== 'escape' && a !== 'mute') return;
     switch (a) {
       case 'phone':
         this.togglePhone();
         return;
       case 'escape':
-        if (this.ui.phone.isOpen && this.ui.phone.canClose) this.closePhone();
+        if (this.ui.optionsOpen) this.ui.toggleOptions(false);
+        else if (this.ui.phone.isOpen && this.ui.phone.canClose) this.closePhone();
         return;
       case 'mute':
-        this.audio.setMuted(!this.audio.muted);
-        this.ui.setMutedLabel(this.audio.muted);
+        this.settings.sound = !this.settings.sound;
+        this.applySettings(this.settings);
         return;
       case 'use': {
-        const t = this.centerPick();
+        if (this.ui.phone.isOpen) return;
+        const t = this.input.locked || this.touch || this.input.noLock ? this.centerPick() : null;
         if (t) t.it.use(t.hit);
         return;
       }
+      case 'useDown':
+      case 'useUp':
+        if (a === 'useUp') this.barricadeFastSession = false;
+        return;
       case 'crouch': {
         const p = this.player;
+        const scene = this.store.state.scene;
+        if (scene === 'code' && this.flags.dropWindow && p.stance === 'seated') {
+          this.leaveSeat('crouch');
+          this.task('dropDown');
+          return;
+        }
         if (!p.canMove) return;
         if (p.stance === 'seated') this.leaveSeat('crouch');
         else p.setStance(p.stance === 'crouch' ? 'stand' : 'crouch');
@@ -833,100 +1199,179 @@ export class Game {
     }
   }
 
-  private leaveSeat(stance: 'stand' | 'crouch'): void {
-    const p = this.player;
-    if (p.stance !== 'seated') return;
-    p.stance = stance;
-    this.world.hands.visible = false;
-    const sx = p.x;
-    const sz = p.z;
-    const tx = AISLE_X - 0.05;
-    const tz = PLAYER_DESK.z + 0.35;
-    void this.tweens.run(0.35, (k) => {
-      p.x = sx + (tx - sx) * k;
-      p.z = sz + (tz - sz) * k;
-    });
-    p.pitch = Math.max(p.pitch, -0.3);
-  }
-
   // ------------------------------------------------------------ frame loop
-
-  private resize(): void {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    this.renderer.setSize(w, h, false);
-    const aspect = w / h;
-    this.camera.aspect = aspect;
-    // keep at least ~68 deg horizontal on tall (portrait) screens
-    const minH = THREE.MathUtils.degToRad(68);
-    const vFromH = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(minH / 2) / aspect));
-    this.camera.fov = Math.max(62, Math.min(100, vFromH));
-    this.camera.updateProjectionMatrix();
-  }
 
   private frame = (now: number) => {
     requestAnimationFrame(this.frame);
     this.frames++;
-    const realDt = Math.min(0.1, Math.max(0, (now - this.last) / 1000));
+    const realMs = Math.max(0, now - this.last);
     this.last = now;
-    const dt = realDt * this.clock.speed;
-
-    const look = this.input.consumeLook();
-    const sens = this.input.usedTouch ? 0.0045 : 0.0032;
-    this.player.look(look.dx * sens, look.dy * sens);
-    const turn = this.input.turnVector();
-    if (turn) this.player.look(turn * 1.9 * realDt, 0);
+    this.fpsAcc.t += realMs;
+    this.fpsAcc.n++;
+    if (this.fpsAcc.t >= 1000) {
+      this.fps = (this.fpsAcc.n * 1000) / this.fpsAcc.t;
+      this.fpsAcc = { t: 0, n: 0 };
+    }
+    const realDt = Math.min(this.clock.speed > 1 ? 0.25 : 0.1, realMs / 1000);
+    const dt = this.flags.paused ? 0 : realDt * this.clock.speed;
 
     if (this.input.usedTouch && !this.touchApplied) {
       this.touchApplied = true;
       this.ui.setMovement(this.player.canMove, true);
-      if (this.store.state.scene === 'code' && this.flags.control) this.updateCodeObjectives();
     }
-    const blocked = this.ui.phone.isOpen || !this.player.canMove;
+    const look = this.input.consumeLook();
+    if (!this.flags.paused) {
+      const sens = this.input.locked ? 0.0022 : this.input.usedTouch ? 0.0045 : 0.0032;
+      this.player.look(look.dx * sens, look.dy * sens);
+      const turn = this.input.turnVector();
+      if (turn) this.player.look(turn * 1.9 * realDt, 0);
+    }
+
+    const blocked = this.ui.phone.isOpen || !this.player.canMove || this.flags.paused;
     const mv = blocked ? { x: 0, y: 0 } : this.input.moveVector();
     if (this.player.stance === 'seated' && this.player.canMove && (mv.x || mv.y)) this.leaveSeat('stand');
-    this.player.update(dt, mv, this.world.colliders);
+    const hurry = this.input.hurry && this.player.canMove && (mv.x !== 0 || mv.y !== 0);
+    this.player.update(dt, mv, this.world.colliders, hurry);
 
     this.clock.tick(dt);
     this.tweens.update(dt);
     this.updateMovers(dt);
     this.world.update(dt);
-    this.updateBreath(dt);
-    this.checkSteps();
+    if (dt > 0) {
+      this.updateBreath(dt);
+      this.updateHold(dt, realDt);
+      this.updateTasks(dt);
+    }
     this.updateHover();
+    this.updatePanic(realDt);
 
     this.player.applyTo(this.camera);
-    this.renderer.render(this.world.scene, this.camera);
+    this.audio.setListener({ x: this.player.x, y: this.player.eye, z: this.player.z }, this.player.yaw);
+    this.renderer.render(realDt);
   };
 
-  private checkSteps(): void {
-    if (!this.flags.control || this.store.state.scene !== 'code') return;
-    const st = this.store.state.steps;
+  private updatePanic(dt: number): void {
+    const st = this.store.state;
+    const noise = st.noise / 100;
+    const beat = this.hold.active ? 0.5 : this.flags.danger ? 0.3 : 0;
+    const target = ['lockdown', 'texts', 'waiting', 'door', 'ending'].includes(st.scene) ? Math.min(1, noise * 0.8 + beat + (st.scene === 'door' ? 0.25 : 0)) : 0;
+    this.panic += (target - this.panic) * Math.min(1, dt * 1.5);
+    this.renderer.panic = this.flags.endShown ? 0 : this.panic;
+    this.audio.whine(this.panic > 0.35 ? this.panic - 0.3 : 0);
+  }
+
+  /** Per-frame task checks (positions, gaze, holds, followers, timers). */
+  private updateTasks(dt: number): void {
+    const st = this.store.state;
+    const w = this.world;
     const p = this.player;
-    if (!st.awayFromDoor && p.stance !== 'seated' && p.z > SAFE_Z) this.dispatch({ type: 'STEP', step: 'awayFromDoor' });
-    if (!st.crouched && p.stance === 'crouch') this.dispatch({ type: 'STEP', step: 'crouched' });
+    if (st.scene === 'exam' && !st.tasks.zoeBackpack) {
+      if (this.gazing(w.zoeBackpack, 4)) {
+        this.flags.gazeBackpack += dt;
+        if (this.flags.gazeBackpack > 0.6) this.task('zoeBackpack');
+      }
+    }
+    if (st.scene === 'texts' && this.flags.danger && this.ui.phone.isOpen && this.holdingStill && !st.tasks.coverGlow) {
+      this.ui.phone.setCovered(true);
+      this.task('coverGlow');
+    }
+    if (st.scene === 'code' && this.flags.paWindow && !st.tasks.lookPA && this.gazing(w.paSpeaker, 12)) this.task('lookPA');
+    if (st.scene === 'lockdown' && this.flags.control) {
+      if (!st.tasks.wallByDoor && p.stance !== 'seated' && inDoorWallZone(p.x, p.z)) this.task('wallByDoor');
+      // Theo follows you, crouched
+      if (this.flags.theoFollowing && !st.tasks.theoDown) {
+        const t = w.theo.root.position;
+        const tx = p.x + 0.55;
+        const tz = p.z + 0.45;
+        const d = Math.hypot(tx - t.x, tz - t.z);
+        if (d > 0.05) {
+          const step = Math.min(d, 1.6 * dt);
+          w.theo.faceTowards(tx, tz);
+          t.x += ((tx - t.x) / d) * step;
+          t.z += ((tz - t.z) / d) * step;
+          w.theo.walking = d > 0.2;
+        } else w.theo.walking = false;
+        if (inDoorWallZone(p.x, p.z) && Math.hypot(t.x - p.x, t.z - p.z) < 1.3) {
+          this.flags.theoFollowing = false;
+          w.theo.walking = false;
+          this.task('theoDown');
+          void this.sendToWall('theo', 1.2);
+        }
+      }
+      // barricade: hold E near the desk
+      if (!st.tasks.barricade && this.input.holdingUse) {
+        const t = this.centerPick();
+        const near = Math.hypot(w.barricade.position.x - p.x, w.barricade.position.z - p.z) < 1.7;
+        if (near && (t?.it.id === 'barricade' || this.input.usedTouch || this.input.noLock || this.input.locked)) {
+          const fast = this.input.hurry;
+          if (fast && !this.barricadeFastSession) {
+            this.barricadeFastSession = true;
+            this.audio.deskSlide(true);
+            this.ui.caption('[the desk legs SCREECH across the floor]', 2.5);
+            this.dispatch({ type: 'NOISE', source: 'deskScrape' });
+          }
+          if (!fast && Math.random() < dt * 2) this.audio.deskSlide(false);
+          this.barricadeK = Math.min(1, this.barricadeK + dt / (fast ? 1.6 : 4.5));
+          w.setBarricade(this.barricadeK);
+          if (this.barricadeK >= 1) this.task('barricade');
+        }
+      }
+      // the timer bar: refresh a few times a second, not every frame
+      const now = performance.now();
+      if (now - this.lastListUpdate > 250) {
+        this.lastListUpdate = now;
+        this.updateChecklist();
+      }
+    }
   }
 
   private updateHover(): void {
     const ptr = this.input.pointer;
-    const fromPointer = ptr.over && !this.input.usedTouch;
+    const fromPointer = !this.input.locked && ptr.over && !this.input.usedTouch && this.input.noLock;
     let t: { it: Interactable; hit: THREE.Intersection } | null = null;
-    if (!this.ui.phone.isOpen && !this.input.dragging) t = fromPointer ? this.pick(ptr.x, ptr.y) : this.centerPick();
+    if (!this.ui.phone.isOpen && !this.input.dragging && !this.flags.paused) t = fromPointer ? this.pick(ptr.x, ptr.y) : this.centerPick();
     const label = t ? t.it.label(t.hit) : null;
     this.world.sheet.setHover(t && t.it.id === 'sheet' && t.hit.uv ? this.world.sheet.bubbleAt(t.hit.uv.x, t.hit.uv.y) : null);
-    this.canvas.classList.toggle('can-use', !!label && fromPointer);
-    this.ui.prompt(label ? `${this.touch ? 'Tap' : fromPointer ? 'Click' : 'E'}: ${label}` : null);
+    const verb = this.touch ? 'Tap' : fromPointer ? 'Click' : 'E';
+    const needsClick = this.input.lockMode && !this.input.locked && !this.flags.paused && !this.ui.phone.isOpen && PLAY_SCENES.includes(this.store.state.scene) && !this.flags.endShown;
+    this.ui.prompt(needsClick ? 'Click the view to look around' : label ? (label.startsWith('Hold') ? label : `${verb}: ${label}`) : null);
   }
 
   // ------------------------------------------------------------ test / debug hooks
 
   targetPos(id: string): THREE.Vector3 | null {
     const w = this.world;
-    if (id === 'eraser') return w.eraser.getWorldPosition(new THREE.Vector3());
-    if (id === 'switch') return SWITCH_POS.clone();
-    if (id === 'theo') return w.theo.head.getWorldPosition(new THREE.Vector3());
-    if (id === 'door') return new THREE.Vector3(DOOR.x, 1.0, DOOR.z + 0.35);
-    if (id === 'window') return new THREE.Vector3(-4.5, 1.2, -0.6);
+    const wp = (o: THREE.Object3D, dy = 0) => o.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, dy, 0));
+    switch (id) {
+      case 'switch':
+        return SWITCH_POS.clone();
+      case 'theo':
+        return wp(w.theo.head, 0.12);
+      case 'door':
+        return new THREE.Vector3(DOOR.x, 1.0, DOOR.z);
+      case 'doorWindow':
+        return wp(w.door.window);
+      case 'pa':
+        return PA_POS.clone();
+      case 'zoeBackpack':
+        return wp(w.zoeBackpack, 0.22);
+      case 'blinds':
+        return wp(w.blindsCord, 1.3);
+      case 'spareSheet':
+        return wp(w.spareSheet);
+      case 'barricade':
+        return wp(w.barricade, 0.72);
+      case 'alert':
+        return wp(w.teacherPhone);
+      case 'window':
+        return new THREE.Vector3(-4.5, 1.6, 0.1);
+      case 'board':
+        return new THREE.Vector3(-1.5, 1.6, -4.5);
+    }
+    if (id.startsWith('pack:')) {
+      const b = w.backpacks.find((x) => x.id === id.slice(5));
+      return b ? wp(b.mesh, 0.25) : null;
+    }
     const m = /^bubble:(\d):(\d)$/.exec(id);
     if (m) return w.handTo(Number(m[1]), Number(m[2]));
     return null;
@@ -939,11 +1384,11 @@ export class Game {
     this.camera.updateMatrixWorld();
     const v = p.clone().project(this.camera);
     const r = this.canvas.getBoundingClientRect();
-    return {
-      x: r.left + ((v.x + 1) / 2) * r.width,
-      y: r.top + ((1 - v.y) / 2) * r.height,
-      onScreen: v.z < 1 && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1,
-    };
+    return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height, onScreen: v.z < 1 && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1 };
+  }
+
+  lookAtPoint(x: number, y: number, z: number): void {
+    this.player.lookAt(new THREE.Vector3(x, y, z));
   }
 
   aim(id: string): boolean {
@@ -963,5 +1408,9 @@ export class Game {
       };
       check();
     });
+  }
+
+  get loud(): boolean {
+    return this.store.state.noise >= NOISE_HIGH;
   }
 }

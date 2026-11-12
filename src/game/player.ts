@@ -3,8 +3,8 @@ import { type Chair, type Collider, ROOM } from './world';
 
 export type Stance = 'seated' | 'stand' | 'crouch';
 
-const EYE: Record<Stance, number> = { seated: 1.12, stand: 1.62, crouch: 0.82 };
-export const SPEED = { stand: 1.45, crouch: 0.7 };
+const EYE: Record<Stance, number> = { seated: 1.12, stand: 1.62, crouch: 0.78 };
+export const SPEED = { stand: 1.45, crouch: 0.75, hurry: 2.8 };
 export const STEP_LENGTH = 0.7;
 
 export class Player {
@@ -20,7 +20,7 @@ export class Player {
   seatYaw = 0;
   /** If set, the player walks here by itself (used by tests and scripted moments). */
   autoTarget: { x: number; z: number } | null = null;
-  onFootstep: (() => void) | null = null;
+  onFootstep: ((hurry: boolean) => void) | null = null;
   onChairBump: ((c: Chair) => void) | null = null;
   /** distance travelled while standing / crouched (for reporting) */
   travelled = { stand: 0, crouch: 0 };
@@ -75,7 +75,7 @@ export class Player {
     this.clampLook();
   }
 
-  update(dt: number, move: { x: number; y: number }, colliders: Collider[]): void {
+  update(dt: number, move: { x: number; y: number }, colliders: Collider[], hurry = false): void {
     this.t += dt;
     this.bumpCooldown = Math.max(0, this.bumpCooldown - dt);
     const targetEye = EYE[this.stance];
@@ -88,7 +88,7 @@ export class Player {
 
     let vx = 0;
     let vz = 0;
-    const speed = this.stance === 'crouch' ? SPEED.crouch : SPEED.stand;
+    const speed = hurry ? SPEED.hurry : this.stance === 'crouch' ? SPEED.crouch : SPEED.stand;
     if (this.autoTarget) {
       const dx = this.autoTarget.x - this.x;
       const dz = this.autoTarget.z - this.z;
@@ -138,11 +138,11 @@ export class Player {
     }
     this.bob += moved * 9;
     this.travelled[this.stance === 'crouch' ? 'crouch' : 'stand'] += moved;
-    if (this.stance === 'stand') {
+    if (this.stance === 'stand' || hurry) {
       this.stepAcc += moved;
       while (this.stepAcc >= STEP_LENGTH) {
         this.stepAcc -= STEP_LENGTH;
-        this.onFootstep?.();
+        this.onFootstep?.(hurry);
       }
     }
   }
