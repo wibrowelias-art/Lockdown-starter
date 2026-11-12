@@ -55,6 +55,8 @@ async function start(): Promise<void> {
     quality: () => (game.renderer.high ? 'high' : 'low'),
     lookAt: (x: number, y: number, z: number) => game.lookAtPoint(x, y, z),
     holdUse: (down: boolean) => (game.input.holdingUse = down),
+    holdingSheet: () => game.flags.holdingSheet,
+    theoFollowing: () => game.flags.theoFollowing || game.store.state.tasks.theoDown,
     people: () => Object.fromEntries([...game.world.people].map(([n, p]) => [n, [+p.root.position.x.toFixed(2), +p.root.position.z.toFixed(2), p.pose]])),
   };
 }

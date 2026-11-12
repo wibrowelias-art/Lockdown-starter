@@ -119,5 +119,7 @@ npm run e2e       # Playwright: desktop, mobile (Pixel 7) and compare (portrait)
 
 - Dialogue is subtitles plus a quiet synthesised murmur; no recorded or TTS voices.
 - Sound, pacing and fear have only been checked by automated runs (which cues fired), not by ear.
-- Frame rate was only measured in headless Chromium with software WebGL (SwiftShader), which is
-  far slower than a real GPU; it has not been measured on a laptop GPU or a phone.
+- Frame rate was only measured in headless Chromium with software WebGL (SwiftShader, no GPU),
+  960x540: high quality about 6-7 fps (exam and lockdown), low quality about 38 fps (exam) and
+  18 fps (lockdown). Software GL is far slower than a real GPU, but the 60 fps laptop target has
+  not been measured on real hardware or on a phone.

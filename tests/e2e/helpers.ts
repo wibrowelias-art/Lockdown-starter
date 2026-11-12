@@ -23,6 +23,8 @@ declare global {
       fps: () => number;
       quality: () => string;
       holdUse: (down: boolean) => void;
+      holdingSheet: () => boolean;
+      theoFollowing: () => boolean;
     };
   }
 }
@@ -85,6 +87,16 @@ export async function clickTarget(page: Page, id: string): Promise<void> {
   expect(p?.onScreen, `${id} on screen`).toBe(true);
   await page.mouse.move(p!.x, p!.y);
   await page.mouse.click(p!.x, p!.y);
+}
+
+/** Click a 3D target until a condition holds (guards against a click landing mid-frame). */
+export async function clickUntil(page: Page, id: string, ok: () => Promise<boolean>, tries = 4): Promise<void> {
+  for (let i = 0; i < tries; i++) {
+    await clickTarget(page, id);
+    await page.waitForTimeout(200);
+    if (await ok()) return;
+  }
+  expect(await ok(), `clicking ${id} worked`).toBe(true);
 }
 
 export async function walk(page: Page, pts: [number, number][]): Promise<void> {

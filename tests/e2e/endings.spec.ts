@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { boot, breatheWithTheo, clickTarget, finishEnding, holdSpaceWhile, report, setSpeed, shot, state, task, waitScene, walk } from './helpers';
+import { boot, breatheWithTheo, clickTarget, clickUntil, finishEnding, holdSpaceWhile, report, setSpeed, shot, state, task, waitScene, walk } from './helpers';
 
 // One browser playthrough per ending. ?speed= runs story time faster; buttons and
 // keys are pressed for real, 3D objects are clicked on the canvas after turning the
@@ -44,18 +44,16 @@ test('ending 1 - everyone went home: every task, all six phases', async ({ page 
   await page.getByTestId('phone-btn').click();
   await page.getByTestId('phone-silent').click();
   await expect(page.getByTestId('phone')).not.toHaveClass(/open/);
-  await clickTarget(page, 'spareSheet');
+  await clickUntil(page, 'spareSheet', () => page.evaluate(() => window.__lockdown.holdingSheet()));
   await walk(page, [[1.75, 0.95], [3.3, 0.95]]);
-  await clickTarget(page, 'theo');
+  await clickUntil(page, 'theo', () => page.evaluate(() => window.__lockdown.theoFollowing()));
   await walk(page, [[3.75, 0.95], [3.75, -0.85], [1.8, -0.85]]);
   await page.waitForFunction(() => window.__lockdown.audioLog().includes('ringtone'), null, { timeout: 60_000 });
-  await clickTarget(page, 'pack:malik');
-  expect(await task(page, 'ringingPhone')).toBe(true);
+  await clickUntil(page, 'pack:malik', () => task(page, 'ringingPhone'));
   await walk(page, [[-3.9, -0.85], [-3.9, 0.4]]);
-  await clickTarget(page, 'blinds');
+  await clickUntil(page, 'blinds', () => task(page, 'blinds'));
   await walk(page, [[-3.9, -2.75], [1.5, -2.75], [2.1, -3.6]]);
-  await clickTarget(page, 'doorWindow');
-  expect(await task(page, 'coverWindow')).toBe(true);
+  await clickUntil(page, 'doorWindow', () => task(page, 'coverWindow'));
   await walk(page, [[3.0, -3.35], [3.95, -3.4]]);
   await page.keyboard.down('e');
   await expect.poll(() => task(page, 'barricade'), { timeout: 30_000 }).toBe(true);

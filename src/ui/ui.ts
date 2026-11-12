@@ -613,12 +613,13 @@ export class UI {
 
   doorChoice(pick: (v: 'open' | 'locked' | 'text') => void, canText: boolean): void {
     this.doorBox.innerHTML = '<div class="wwyd">WHAT WOULD YOU DO?</div>';
+    this.root.classList.add('choosing');
     const row = el('div', 'door-row');
     const mk = (label: string, cls: string, v: 'open' | 'locked' | 'text', id: string) => {
       const b = el('button', `door-btn ${cls}`, label);
       b.dataset.testid = id;
       b.addEventListener('click', () => {
-        this.doorBox.innerHTML = '';
+        this.clearDoorChoice();
         pick(v);
         this.onPicked?.();
       });
@@ -633,6 +634,7 @@ export class UI {
 
   clearDoorChoice(): void {
     this.doorBox.innerHTML = '';
+    this.root.classList.remove('choosing');
   }
 
   holdMeter(state: { progress: number; sub: string; ok: boolean } | null): void {

@@ -61,9 +61,11 @@ test('compare each phase with the reference frames', async ({ page }) => {
   await sideBySide(page, '5b-sirens', '082s_siren-pink-blinds.jpg', await shot(page, 'tmp-siren', DIR));
 
   await waitScene(page, 'door', 120_000);
+  await setSpeed(page, 1);
   await expect(page.getByTestId('subtitles')).toContainText("it's me", { timeout: 60_000 });
   await page.evaluate(() => window.__lockdown.lookAt(2.6, 1.0, -4.5));
   await sideBySide(page, '6-knock', '091s_knock-zoe-voice.jpg', await shot(page, 'tmp-knock', DIR));
+  await setSpeed(page, 6);
   await expect(page.getByTestId('door-keep')).toBeVisible({ timeout: 120_000 });
   await sideBySide(page, '6b-choice', '119s_choice-card.jpg', await shot(page, 'tmp-choice', DIR));
   const fps = await page.evaluate(() => window.__lockdown.fps());

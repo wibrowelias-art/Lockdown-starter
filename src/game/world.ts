@@ -756,13 +756,13 @@ export class World {
     const ph = Math.sin(this.t * 4.2);
     const pink = Math.max(0, ph) ** 2;
     const blue = Math.max(0, -ph) ** 2;
-    const sc = new THREE.Color(1.0 * pink + 0.15 * blue, 0.3 * pink + 0.35 * blue, 0.65 * pink + 1.0 * blue);
+    const sc = new THREE.Color(0.95 * pink + 0.2 * blue, 0.35 * pink + 0.4 * blue, 0.7 * pink + 1.0 * blue);
     this.sirenLight.color.copy(sc);
-    this.sirenLight.intensity = lvl * (pink + blue) * 9;
+    this.sirenLight.intensity = lvl * (pink + blue) * 4.5;
     const base = new THREE.Color(this.lightsOn ? 0xdfeaf5 : 0x6f7fc0).multiplyScalar(this.lightsOn ? 1.4 : 1.1);
     const open = 1 - this.blindsClosed * 0.65;
-    this.windowMat.color.copy(base).multiplyScalar(open).lerp(sc.clone().multiplyScalar(1.8), Math.min(0.75, lvl * (pink + blue)));
-    this.stripeMat.opacity = Math.min(0.6, lvl * (pink + blue) * 0.55 + (this.lightsOn ? 0 : 0.12 * open));
+    this.windowMat.color.copy(base).multiplyScalar(open).lerp(sc.clone().multiplyScalar(1.5), Math.min(0.55, lvl * (pink + blue)));
+    this.stripeMat.opacity = Math.min(0.42, lvl * (pink + blue) * 0.4 + (this.lightsOn ? 0 : 0.12 * open));
     this.stripeMat.color.set(0xb8c4ff).lerp(sc, Math.min(1, lvl * 1.5));
     // handle: rattle, or a slow press
     if (this.rattle > 0) {
