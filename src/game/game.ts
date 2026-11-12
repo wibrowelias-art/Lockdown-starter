@@ -834,7 +834,7 @@ export class Game {
     await s.until(() => !this.hold.active, dur + 2);
     this.ui.hint(null);
     this.ui.holdMeter(null);
-    const passed = this.hold.bad < 0.5;
+    const passed = this.hold.bad < Math.min(0.5, (dur / Math.max(1, this.clock.speed)) * 0.3);
     this.hold.active = false;
     void label;
     return passed;
@@ -847,7 +847,9 @@ export class Game {
     h.t += dt;
     h.real = (h.real ?? 0) + realDt;
     const moving = this.input.lastLookPx > 6 || this.player.speed > 0.05 || !this.holdingStill;
-    if (moving && h.real > 1.0) h.bad += realDt;
+    // grace and allowance in real seconds, capped by the beat's real length (matters only at ?speed > 1)
+    const realLen = h.dur / Math.max(1, this.clock.speed);
+    if (moving && h.real > Math.min(1.0, realLen * 0.3)) h.bad += realDt;
     h.ok = !moving;
     this.ui.holdMeter({ progress: Math.min(1, h.t / h.dur), sub: h.ok ? 'still...' : this.holdingStill ? 'you moved!' : 'hold Space', ok: h.ok });
     if (h.t >= h.dur) h.active = false;
