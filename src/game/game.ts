@@ -1142,11 +1142,11 @@ export class Game {
       // closer than ~1.1 m in front of them, they turn their face away (fully by 1.1 m)
       const want = f > 0 ? THREE.MathUtils.clamp((1.5 - d) / 0.4, 0, 1) : 0;
       // turn away from the camera's side (+yaw turns the face towards its own -x)
-      if (p.shy < 0.05) {
-        const a = p.root.rotation.y + p.lookYaw;
-        p.shyDir = Math.cos(a) * (this.camV.x - this.faceV.x) - Math.sin(a) * (this.camV.z - this.faceV.z) >= 0 ? 1 : -1;
-        p.shyPitch = this.camV.y < this.faceV.y ? 1 : -1;
-      }
+      // (re-picked as you move round them; a small dead zone stops it flip-flopping dead ahead)
+      const a = p.root.rotation.y + p.lookYaw;
+      const side = Math.cos(a) * (this.camV.x - this.faceV.x) - Math.sin(a) * (this.camV.z - this.faceV.z);
+      if (p.shy < 0.05 || Math.abs(side) > 0.12) p.shyDir = side >= 0 ? 1 : -1;
+      p.shyPitch = this.camV.y < this.faceV.y ? 1 : -1;
       // already inside 1 m and looking at you (a scripted glance, or you came round them): at once
       if (want > p.shy && f > FACE_CONE && d < 1.05) p.shy = want;
       else p.shy += (want - p.shy) * Math.min(1, dt * 8);
