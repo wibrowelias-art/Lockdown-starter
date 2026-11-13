@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.DS_Store
+test-results/
+playwright-report/
+Saved/
+Intermediate/
+DerivedDataCache/
+Binaries/
+tests/e2e/zz-*.spec.ts
