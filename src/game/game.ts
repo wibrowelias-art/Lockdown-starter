@@ -1065,7 +1065,6 @@ export class Game {
   private theoSide: [number, number] = [1.1, 0.85];
   faceBlocks = 0;
   private fwdV = new THREE.Vector3();
-  private localV = new THREE.Vector3();
   /** How much the body faces a point: 1 straight at it, <= 0 the point is behind them. */
   private facing(p: Person, x: number, y: number, z: number, head = false): number {
     // body facing by default (the head itself turns away when you come close); the "seen"
@@ -1077,6 +1076,15 @@ export class Game {
     const l = Math.hypot(dx, dy, dz) || 1;
     return -(this.fwdV.x * dx + this.fwdV.y * dy + this.fwdV.z * dz) / l;
   }
+  /** How much a person's gaze (body + scripted head turn, without the look-away) points at (x, z). */
+  private lookFacing(p: Person, x: number, z: number): number {
+    const a = p.root.rotation.y + p.lookYaw;
+    const dx = x - this.faceV.x;
+    const dz = z - this.faceV.z;
+    const l = Math.hypot(dx, dz) || 1;
+    return (-Math.sin(a) * dx - Math.cos(a) * dz) / l;
+  }
+
   /** Personal space: in front of these two faces you can't step closer than ~1 m (they never shove you). */
   private keepFaceDistance(prevX: number, prevZ: number): void {
     if (this.player.stance === 'seated') return;
@@ -1087,7 +1095,7 @@ export class Game {
       if (p === w.theo && this.flags.theoFollowing) continue;
       p.head.getWorldPosition(this.faceV);
       this.faceV.y += 0.1 * p.root.scale.y;
-      if (this.facing(p, this.player.x, this.player.eye, this.player.z) < FACE_CONE) continue;
+      if (Math.max(this.facing(p, this.player.x, this.player.eye, this.player.z), this.lookFacing(p, this.player.x, this.player.z)) < FACE_CONE) continue;
       const dy = this.player.eye - this.faceV.y;
       const need = Math.sqrt(Math.max(0, 1.04 * 1.04 - dy * dy));
       const dx = this.player.x - this.faceV.x;
@@ -1129,24 +1137,30 @@ export class Game {
       if (!p.root.visible) continue;
       p.head.getWorldPosition(this.faceV);
       this.faceV.y += 0.1 * p.root.scale.y;
-      const d = this.faceV.distanceTo(this.camV);
-      // a face counts as seen only within ~60 degrees of where it looks (beside or behind it you
-      // see a profile, hair and shoulders)
-      const f = this.facing(p, this.camV.x, this.camV.y, this.camV.z);
+      let d = this.faceV.distanceTo(this.camV);
+      const f = this.lookFacing(p, this.camV.x, this.camV.z);
+      // closer than ~1.1 m in front of them, they turn their face away (fully by 1.1 m)
+      const want = f > 0 ? THREE.MathUtils.clamp((1.5 - d) / 0.4, 0, 1) : 0;
+      // turn away from the camera's side (+yaw turns the face towards its own -x)
+      if (p.shy < 0.05) {
+        const a = p.root.rotation.y + p.lookYaw;
+        p.shyDir = Math.cos(a) * (this.camV.x - this.faceV.x) - Math.sin(a) * (this.camV.z - this.faceV.z) >= 0 ? 1 : -1;
+        p.shyPitch = this.camV.y < this.faceV.y ? 1 : -1;
+      }
+      // already inside 1 m and looking at you (a scripted glance, or you came round them): at once
+      if (want > p.shy && f > FACE_CONE && d < 1.05) p.shy = want;
+      else p.shy += (want - p.shy) * Math.min(1, dt * 8);
+      p.refresh();
+      // measure what the camera sees now: a face counts as seen only within ~60 degrees of where
+      // it points (beside or behind it you see a profile, hair and shoulders)
+      p.head.getWorldPosition(this.faceV);
+      this.faceV.y += 0.1 * p.root.scale.y;
+      d = this.faceV.distanceTo(this.camV);
       const front = this.facing(p, this.camV.x, this.camV.y, this.camV.z, true) > FACE_CONE;
       if (playing && front && d < this.faceMin) {
         this.faceMin = d;
-        this.faceMinAt = `${p.name} ${sc} player(${this.player.x.toFixed(2)},${this.player.z.toFixed(2)},${this.player.stance}) face(${this.faceV.x.toFixed(2)},${this.faceV.y.toFixed(2)},${this.faceV.z.toFixed(2)})`;
+        this.faceMinAt = `${p.name} ${sc} player(${this.player.x.toFixed(2)},${this.player.z.toFixed(2)},${this.player.stance}) face(${this.faceV.x.toFixed(2)},${this.faceV.y.toFixed(2)},${this.faceV.z.toFixed(2)}) gaze=${f.toFixed(2)} shy=${p.shy.toFixed(2)}`;
       }
-      // closer than ~1.1 m in front of them, they turn their face away (fully by 1.1 m)
-      const want = f > 0 ? THREE.MathUtils.clamp((1.5 - d) / 0.4, 0, 1) : 0;
-      // turn away from the camera's side (+yaw turns the face towards the body's local -x)
-      if (p.shy < 0.05) {
-        this.localV.copy(this.camV);
-        p.root.worldToLocal(this.localV);
-        p.shyDir = this.localV.x >= 0 ? 1 : -1;
-      }
-      p.shy += (want - p.shy) * Math.min(1, dt * 8);
     }
   }
 

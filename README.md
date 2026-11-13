@@ -93,8 +93,9 @@ browser allows:
   denim fabric, skin with pores and sheen (not waxy), hair with strand normals, wet eyes that
   blink. Only Ms. Okafor and Theo have open, readable faces, and a face is never seen from the
   front (within 60 degrees of where it looks) closer than 1 m: you can't step into their space,
-  they step round you, and closer than ~1.1 m they turn their face away (the guidance bot
-  measures this over a whole playthrough: closest frontal face 1.01 m); the other
+  they step round you, and closer than ~1.1 m in front of them they turn their face away, at
+  once if a scripted glance would meet the camera (the guidance bot
+  measures this over a whole playthrough: closest frontal face 1.3 m); the other
   students keep their eyes down and are mostly seen from behind. Breathing, micro head
   motion, trembling, smooth crouch/stand, walk cycles driven by distance (no foot sliding).
 - **UI:** Inter, white subtitles with a soft shadow and a small coloured speaker tag, a

@@ -263,6 +263,8 @@ export class Person {
   shy = 0;
   /** which way to turn the face away (set from the side the camera is on) */
   shyDir = 1;
+  /** +1: tilt the face up (the camera is below it), -1: down */
+  shyPitch = -1;
   /** seconds of mouth movement left */
   talking = 0;
   private t = Math.random() * 10;
@@ -560,6 +562,11 @@ export class Person {
     }
   }
 
+  /** Where the person is looking, relative to the body (scripted head turn + twist), without the look-away. */
+  get lookYaw(): number {
+    return this.headYawCur + this.cur.twist * 0.5;
+  }
+
   setPose(p: Pose, instant = false): void {
     this.pose = p;
     this.target = { ...POSES[p] };
@@ -621,7 +628,15 @@ export class Person {
       this.blinkIn = 2.5 + Math.random() * 4;
     }
     this.blinking = Math.max(0, this.blinking - dt);
+    this.lastAmp = amp;
     this.apply(amp);
+  }
+
+  private lastAmp = 0;
+  /** Re-apply the current pose now (after shy / head changes) without advancing time. */
+  refresh(): void {
+    this.apply(this.lastAmp);
+    this.root.updateMatrixWorld(true);
   }
 
   private apply(amp: number): void {
@@ -649,8 +664,8 @@ export class Person {
     this.elbowL.rotation.x = j.elbowL + 0.15 * this.gait;
     this.elbowR.rotation.x = j.elbowR + 0.15 * this.gait;
     const micro = Math.sin(this.t * 0.63) * 0.03 + Math.sin(this.t * 1.37 + 1) * 0.015;
-    this.head.rotation.y = this.headYawCur + j.twist * 0.5 + micro + this.shy * this.shyDir;
-    this.head.rotation.x = this.headPitchCur + j.lean * 0.4 - j.neck - this.shy * 0.5 + Math.sin(this.t * 0.91) * 0.015 + shake * 3;
+    this.head.rotation.y = this.headYawCur + j.twist * 0.5 + micro + this.shy * 1.2 * this.shyDir;
+    this.head.rotation.x = this.headPitchCur + j.lean * 0.4 - j.neck + this.shy * 0.35 * this.shyPitch + Math.sin(this.t * 0.91) * 0.015 + shake * 3;
     const lid = this.blinking > 0 ? -1.4 : this.lidOpen - this.shy * 0.5;
     for (const l of this.lids) l.rotation.x = lid;
     const open = this.talking > 0 ? Math.abs(Math.sin(this.t * 14)) * 0.004 : 0;
