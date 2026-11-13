@@ -350,7 +350,9 @@ export class Guidance {
         let ax = this.v.x;
         let ay = this.v.y;
         if (Math.hypot(ax, ay) < 1e-3) ay = -1;
-        angle = Math.atan2(ay, ax);
+        // behind you: the arrow sits in the bottom sector ("turn round"), leaning to the target's side
+        const wellBehind = -this.v.z / Math.max(1e-6, this.v.length()) < -0.5; // more than 120 degrees round
+        angle = wellBehind ? -Math.PI / 2 + THREE.MathUtils.clamp((ax / (Math.abs(ax) + 1)) * 1.4, -0.9, 0.9) : Math.atan2(ay, ax);
         const fwd = Math.acos(THREE.MathUtils.clamp(-this.v.z / Math.max(1e-6, this.v.length()), -1, 1));
         const op = THREE.MathUtils.smoothstep(fwd, 0.35, 0.9);
         pointerVisible = op > 0.05;

@@ -647,8 +647,8 @@ export class Person {
     this.elbowL.rotation.x = j.elbowL + 0.15 * this.gait;
     this.elbowR.rotation.x = j.elbowR + 0.15 * this.gait;
     const micro = Math.sin(this.t * 0.63) * 0.03 + Math.sin(this.t * 1.37 + 1) * 0.015;
-    this.head.rotation.y = this.headYawCur + j.twist * 0.5 + micro + this.shy * 0.5;
-    this.head.rotation.x = this.headPitchCur + j.lean * 0.4 - j.neck - this.shy * 0.45 + Math.sin(this.t * 0.91) * 0.015 + shake * 3;
+    this.head.rotation.y = this.headYawCur + j.twist * 0.5 + micro + this.shy * 1.0;
+    this.head.rotation.x = this.headPitchCur + j.lean * 0.4 - j.neck - this.shy * 0.5 + Math.sin(this.t * 0.91) * 0.015 + shake * 3;
     const lid = this.blinking > 0 ? -1.4 : this.lidOpen - this.shy * 0.5;
     for (const l of this.lids) l.rotation.x = lid;
     const open = this.talking > 0 ? Math.abs(Math.sin(this.t * 14)) * 0.004 : 0;

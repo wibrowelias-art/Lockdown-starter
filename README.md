@@ -164,11 +164,40 @@ npm test          # Vitest (state machine)
 npm run e2e       # Playwright: desktop, mobile (Pixel 7) and compare (portrait) projects
 ```
 
+The game plays at Low in the headless tests (software GL); every screenshot is rendered at
+High through a test hook (`hq`), except the mobile ones, which stay on Low like a real phone.
+The guidance bot plays the whole game from the guidance alone (24/24 tasks) and checks that
+the faces of Ms. Okafor and Theo are never seen closer than ~1 m.
+
+## Performance (Stage 4)
+
+- Presets Low / Medium / High / Ultra, and Auto (default on desktop): a 1-second benchmark at
+  High on the title screen picks the preset (>= 90 fps Ultra, >= 50 High, >= 28 Medium, else
+  Low). Phones and tablets start on Low. **F3** shows fps, frame time, preset, draw calls.
+- All shaders are compiled behind the loading screen; lights switch on and off by intensity
+  (the light count never changes during play), so the lights-out moment does not recompile.
+- No per-frame allocations in the hot paths (shared vectors), dust motes are one fixed buffer.
+- Download: the whole build is about 3 MB (budget 40 MB); textures are generated at load.
+
+Measured frame rates, **headless Chromium with software WebGL (SwiftShader, no GPU),
+960x540**, exam / lights off:
+
+| Preset | Exam | Lights off |
+|---|---|---|
+| Low | 3.6-4.3 fps | 4.0-4.4 fps |
+| Medium | 0.5-0.6 fps | 1.1-1.7 fps |
+| High | 0.1-0.2 fps | 1.1-1.3 fps |
+| Ultra | 0.1-0.2 fps | 1.1-1.3 fps |
+
+The Auto benchmark measured 10.7-10.8 fps at High on this machine and chose Low. These are
+software-rendering numbers: they are not a measure of the 60 fps target on a real laptop GPU,
+which could not be measured here. Low still draws ~600 calls with ~124k triangles.
+
 ## Not done / known limits
 
 - Dialogue is subtitles plus a quiet synthesised murmur; no recorded or TTS voices.
 - Sound, pacing and fear have only been checked by automated runs (which cues fired), not by ear.
-- Frame rate was only measured in headless Chromium with software WebGL (SwiftShader, no GPU),
-  960x540: high quality about 6-7 fps (exam and lockdown), low quality about 38 fps (exam) and
-  18 fps (lockdown). Software GL is far slower than a real GPU, but the 60 fps laptop target has
-  not been measured on real hardware or on a phone.
+- Real-GPU frame rates (laptop, phone) were not measured, see above.
+- People are a clean semi-real build from primitives, not scanned or sculpted models: they read
+  as people at a distance and from behind, but up close they look like well-lit mannequins.
+- Assets are procedural (the network blocks the CC0 asset sites), see `docs/ASSETS.md`.

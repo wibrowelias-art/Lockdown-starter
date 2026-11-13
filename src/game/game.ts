@@ -1064,9 +1064,10 @@ export class Game {
   faceBlocks = 0;
   private fwdV = new THREE.Vector3();
   /** How much the body faces a point: 1 straight at it, <= 0 the point is behind them. */
-  private facing(p: Person, x: number, y: number, z: number): number {
-    // body facing (not the head, which itself turns away when you come close)
-    p.root.getWorldDirection(this.fwdV); // +z of the body = its back
+  private facing(p: Person, x: number, y: number, z: number, head = false): number {
+    // body facing by default (the head itself turns away when you come close); the "seen"
+    // measure uses where the face actually points
+    (head ? p.head : p.root).getWorldDirection(this.fwdV); // +z = the back
     const dx = x - this.faceV.x;
     const dy = y - this.faceV.y;
     const dz = z - this.faceV.z;
@@ -1129,13 +1130,14 @@ export class Game {
       // a face counts as seen only within ~60 degrees of where it looks (beside or behind it you
       // see a profile, hair and shoulders)
       const f = this.facing(p, this.camV.x, this.camV.y, this.camV.z);
-      const front = f > FACE_CONE;
+      const front = this.facing(p, this.camV.x, this.camV.y, this.camV.z, true) > FACE_CONE;
       if (playing && front && d < this.faceMin) {
         this.faceMin = d;
         this.faceMinAt = `${p.name} ${sc} player(${this.player.x.toFixed(2)},${this.player.z.toFixed(2)},${this.player.stance}) face(${this.faceV.x.toFixed(2)},${this.faceV.y.toFixed(2)},${this.faceV.z.toFixed(2)})`;
       }
-      const want = f > 0 ? THREE.MathUtils.clamp((1.2 - d) / 0.3, 0, 1) : 0;
-      p.shy += (want - p.shy) * Math.min(1, dt * 6);
+      // closer than ~1.1 m in front of them, they turn their face away (fully by 1.1 m)
+      const want = f > 0 ? THREE.MathUtils.clamp((1.5 - d) / 0.4, 0, 1) : 0;
+      p.shy += (want - p.shy) * Math.min(1, dt * 8);
     }
   }
 

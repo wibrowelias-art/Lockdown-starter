@@ -83,8 +83,8 @@ const SEATS: Record<string, [number, number]> = {
 
 /** Lockdown spots along the door wall, either side of the door, out of the window's sight line. */
 export const HUDDLE: Record<string, [number, number, number]> = {
-  teacher: [1.5, -4.1, 0],
-  ines: [0.9, -4.05, 0.1],
+  teacher: [1.2, -4.15, 0],
+  ines: [0.72, -4.08, 0.1],
   hana: [0.3, -4.05, 0.05],
   jo: [-0.3, -4.0, 0],
   malik: [3.55, -4.0, -0.05],
@@ -1176,10 +1176,13 @@ export class World {
     // recompiles (and no stutter) when the lights go out
     this.panelLights.forEach((l) => {
       l.visible = l.userData.rect === this.useRect;
-      l.intensity = on ? l.userData.base : 0;
+      l.intensity = on ? l.userData.base * (l.userData.rect === false && !this.q.shadows ? 1.35 : 1) : 0;
     });
     this.gapLight.visible = this.useRect;
-    this.spots.forEach((l) => (l.intensity = on ? 14 : 0));
+    this.spots.forEach((l) => {
+      l.visible = this.q.shadows; // Low (no shadows): the panel fill light stands in for them
+      l.intensity = on ? 14 : 0;
+    });
     this.panels.forEach((p) => (p.material = on ? this.panelOn : this.panelOff));
     this.hallSpot.intensity = on ? 6 : 20;
     (this.gapLight as THREE.RectAreaLight).intensity = on ? 3 : 14;
@@ -1190,8 +1193,10 @@ export class World {
   }
 
   /** Live quality changes (shadows, area lights, dust) without rebuilding the room. */
-  applyQuality(q: { shadows: boolean; shadowSize: number; rectLights: boolean; dust: number; sirenShadows: boolean }): void {
+  applyQuality(q: { shadows: boolean; shadowSize: number; rectLights: boolean; dust: number; sirenShadows: boolean; rich?: boolean }): void {
     this.q = { ...this.q, ...q };
+    this.setRich(q.rich ?? true);
+    this.phoneLight.visible = q.rich ?? true;
     this.sun.castShadow = q.shadows;
     this.spots.forEach((s) => (s.castShadow = q.shadows));
     this.hallSpot.castShadow = q.shadows;
@@ -1202,6 +1207,22 @@ export class World {
   }
 
   private useRect = true;
+  private rich: boolean | null = null;
+
+  /** Low/Medium: drop sheen and clearcoat (skin, cloth, hair, eyes, bottle) - cheaper shaders. */
+  private setRich(on: boolean): void {
+    if (this.rich === on) return;
+    this.rich = on;
+    const seen = new Set<THREE.Material>();
+    this.scene.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.MeshPhysicalMaterial | undefined;
+      if (!m || !m.isMeshPhysicalMaterial || seen.has(m)) return;
+      seen.add(m);
+      const orig = (m.userData.orig ??= { sheen: m.sheen, clearcoat: m.clearcoat }) as { sheen: number; clearcoat: number };
+      m.sheen = on ? orig.sheen : 0;
+      m.clearcoat = on ? orig.clearcoat : 0;
+    });
+  }
 
   /** Start-up flicker of the fluorescent panels (exam start). */
   flickerPanels(sec: number): void {

@@ -22,19 +22,21 @@ export interface PresetSpec {
   rectLights: boolean;
   dust: number;
   sirenShadows: boolean;
+  /** sheen / clearcoat on people and props (off on Low and Medium) */
+  rich: boolean;
 }
 
 export function presetSpec(p: Preset): PresetSpec {
   const dpr = window.devicePixelRatio || 1;
   switch (p) {
     case 'low':
-      return { pixelRatio: Math.min(dpr, 1) * 0.8, shadows: false, shadowSize: 512, ao: false, bloom: false, smaa: false, dof: false, rectLights: false, dust: 0, sirenShadows: false };
+      return { pixelRatio: Math.min(dpr, 1) * 0.8, shadows: false, shadowSize: 512, ao: false, bloom: false, smaa: false, dof: false, rectLights: false, dust: 0, sirenShadows: false, rich: false };
     case 'medium':
-      return { pixelRatio: Math.min(dpr, 1), shadows: true, shadowSize: 1024, ao: false, bloom: true, smaa: true, dof: false, rectLights: true, dust: 140, sirenShadows: false };
+      return { pixelRatio: Math.min(dpr, 1), shadows: true, shadowSize: 1024, ao: false, bloom: true, smaa: true, dof: false, rectLights: true, dust: 140, sirenShadows: false, rich: false };
     case 'high':
-      return { pixelRatio: Math.min(dpr, 1.5), shadows: true, shadowSize: 2048, ao: true, bloom: true, smaa: true, dof: true, rectLights: true, dust: 260, sirenShadows: true };
+      return { pixelRatio: Math.min(dpr, 1.5), shadows: true, shadowSize: 2048, ao: true, bloom: true, smaa: true, dof: true, rectLights: true, dust: 260, sirenShadows: true, rich: true };
     case 'ultra':
-      return { pixelRatio: Math.min(dpr, 2), shadows: true, shadowSize: 4096, ao: true, bloom: true, smaa: true, dof: true, rectLights: true, dust: 400, sirenShadows: true };
+      return { pixelRatio: Math.min(dpr, 2), shadows: true, shadowSize: 4096, ao: true, bloom: true, smaa: true, dof: true, rectLights: true, dust: 400, sirenShadows: true, rich: true };
   }
 }
 
