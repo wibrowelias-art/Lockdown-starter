@@ -55,6 +55,7 @@ export interface GuideState {
 }
 
 const WARM = new THREE.Color(1.0, 0.93, 0.8);
+const WALL_ANCHOR = new THREE.Vector3(NOAH_WALL_SPOT.x, 0.3, NOAH_WALL_SPOT.z);
 
 export class Guidance {
   mode: GuideMode = 'full';
@@ -151,7 +152,7 @@ export class Guidance {
           kind: 'world',
           text: "Get to the wall beside the door, out of the window's view.",
           key: 'move',
-          anchor: new THREE.Vector3(NOAH_WALL_SPOT.x, 0.3, NOAH_WALL_SPOT.z),
+          anchor: WALL_ANCHOR,
           objects: [g.wallMarker],
           timed: true,
           whisper: { who: 'teacher', text: 'Over here. By the wall.' },
@@ -181,7 +182,7 @@ export class Guidance {
         if (!t.theoDown)
           cands.push(
             g.flags.theoFollowing
-              ? { task: 'theoDown', id: 'wallSpot', kind: 'world', text: 'Bring Theo to the wall beside the door.', key: 'move', anchor: new THREE.Vector3(NOAH_WALL_SPOT.x, 0.3, NOAH_WALL_SPOT.z), objects: [g.wallMarker], timed: true }
+              ? { task: 'theoDown', id: 'wallSpot', kind: 'world', text: 'Bring Theo to the wall beside the door.', key: 'move', anchor: WALL_ANCHOR, objects: [g.wallMarker], timed: true }
               : { task: 'theoDown', id: 'theo', kind: 'world', text: 'Pull Theo down. He is frozen by the lockers.', key: 'E', objects: [w.theo.root], timed: true, whisper: { who: 'ines', text: "Noah. Theo. He's not moving." } },
           );
         if (!t.blinds)
@@ -237,13 +238,15 @@ export class Guidance {
     }
   }
 
+  private anchorV = new THREE.Vector3();
+  private ndcV = new THREE.Vector3();
   private anchorOf(c: GuideTarget): THREE.Vector3 | null {
     if (c.anchor) return c.anchor;
     if (!c.objects?.length) return null;
     this.box.makeEmpty();
     for (const o of c.objects) this.box.expandByObject(o);
     if (this.box.isEmpty()) return null;
-    const v = new THREE.Vector3();
+    const v = this.anchorV;
     this.box.getCenter(v);
     v.y = this.box.max.y + 0.18;
     return v;
@@ -331,7 +334,7 @@ export class Guidance {
       const cam = g.camera;
       this.v.copy(anchor).applyMatrix4(cam.matrixWorldInverse);
       const behind = this.v.z > 0;
-      const ndc = anchor.clone().project(cam);
+      const ndc = this.ndcV.copy(anchor).project(cam);
       const on = !behind && Math.abs(ndc.x) < 0.88 && Math.abs(ndc.y) < 0.85;
       const r = g.renderer.three.domElement.getBoundingClientRect();
       if (on) {

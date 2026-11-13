@@ -216,8 +216,12 @@ test('guidance leads the player through all 24 tasks', async ({ page }) => {
     if (s.kind === 'meter' && !s.markersHidden) problems.push(`${t}: markers not hidden during the stillness beat`);
     if (st.tasks[t] && !doneChecked.has(t)) problems.push(`${t}: done but not checked`);
   }
-  report('guidance-bot', { seen: Object.fromEntries(Object.entries(seen).map(([k, v]) => [k, v.kind])), tasksDone: Object.values(st.tasks).filter(Boolean).length, ending: st.ending, problems, teacherDid: st.teacherDid, trace: trace.filter((x) => x.includes('lockdown')), errors: run.errors });
+  const faceMin = await page.evaluate(() => (window as unknown as { __lockdown: { faceMin: () => number } }).__lockdown.faceMin());
+  const faceMinAt = await page.evaluate(() => (window as unknown as { __lockdown: { faceMinAt: () => string } }).__lockdown.faceMinAt());
+  report('guidance-bot', { faceMin: +faceMin.toFixed(2), faceMinAt, seen: Object.fromEntries(Object.entries(seen).map(([k, v]) => [k, v.kind])), tasksDone: Object.values(st.tasks).filter(Boolean).length, ending: st.ending, problems, teacherDid: st.teacherDid, trace: trace.filter((x) => x.includes('lockdown')), errors: run.errors });
   expect(problems).toEqual([]);
+  // faces (Ms. Okafor, Theo) are never seen closer than ~1 m
+  expect(faceMin).toBeGreaterThan(0.95);
   expect(run.errors).toEqual([]);
 });
 

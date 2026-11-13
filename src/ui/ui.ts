@@ -702,6 +702,22 @@ export class UI {
     this.promptEl.style.display = text ? '' : 'none';
   }
 
+  /** F3: frame-time counter. */
+  fpsOn = false;
+  private fpsEl = el('div', 'fpsbox');
+  toggleFps(): void {
+    this.fpsOn = !this.fpsOn;
+    if (!this.fpsEl.parentElement) {
+      this.fpsEl.dataset.testid = 'fps';
+      this.root.append(this.fpsEl);
+    }
+    this.fpsEl.style.display = this.fpsOn ? '' : 'none';
+    if (this.fpsOn) this.fpsEl.textContent = 'measuring...';
+  }
+  setFps(text: string): void {
+    this.fpsEl.textContent = text;
+  }
+
   /** Legacy hints: shown only when guidance is off (the task card replaces them), or when forced. */
   guidanceOff = false;
   hint(text: string | null, force = false): void {
@@ -802,7 +818,7 @@ export class UI {
   showTitle(found: EndingId[], onBegin: () => void, onLeave: () => void, touch: boolean): void {
     const s = this.showScreen(
       `<div class="card title-card" data-testid="title">
-        <div class="kicker">An interactive story &middot; demo v2</div>
+        <div class="kicker">An interactive story &middot; demo v3</div>
         <h1>ROOM 214</h1>
         <div class="notice" data-testid="content-notice">
           <h2>Content notice</h2>

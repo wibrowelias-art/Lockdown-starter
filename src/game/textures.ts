@@ -14,8 +14,8 @@ function tex(c: HTMLCanvasElement): THREE.CanvasTexture {
   return t;
 }
 
-const ROUND = '"Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif';
-const CHALK = '"Fredoka", "Comic Sans MS", cursive';
+const ROUND = '"Inter", system-ui, sans-serif';
+const CHALK = '"Caveat", "Comic Sans MS", cursive';
 
 /** Green board: "BIOLOGY FINAL 10:00 - 11:30", "NO PHONES. NO TALKING. Good luck!" and a DNA helix. */
 export function boardTexture(): THREE.CanvasTexture {
@@ -166,7 +166,7 @@ export class AnswerSheet {
     g.fillText('BIOLOGY - FINAL EXAM', 40, 66);
     g.font = `500 28px ${ROUND}`;
     g.fillText('Name:', 40, 120);
-    g.font = `500 34px ${CHALK}`;
+    g.font = `600 44px ${CHALK}`;
     g.fillStyle = '#2b3a8f';
     g.fillText('Noah R.', 130, 120);
     g.strokeStyle = '#8a8f9a';
@@ -364,11 +364,11 @@ export function drawBoard(g: CanvasRenderingContext2D, _w: number, _h: number): 
   g.shadowColor = 'rgba(255,255,255,0.25)';
   g.shadowBlur = 2;
   g.fillStyle = chalk();
-  g.font = `600 68px ${CHALK}`;
+  g.font = `700 92px ${CHALK}`;
   g.fillText('BIOLOGY FINAL', 50, 105);
-  g.font = `500 44px ${CHALK}`;
+  g.font = `600 58px ${CHALK}`;
   g.fillText('10:00 - 11:30', 54, 168);
-  g.font = `600 42px ${CHALK}`;
+  g.font = `600 56px ${CHALK}`;
   g.fillText('NO PHONES. NO TALKING.', 54, 285);
   g.fillText('Good luck!', 620, 285);
   g.strokeStyle = chalk(0.85);

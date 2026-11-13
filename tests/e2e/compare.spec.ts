@@ -2,9 +2,10 @@ import { type Page, expect, test } from '@playwright/test';
 import fs from 'node:fs';
 import { boot, setSpeed, shot, waitScene } from './helpers';
 
-// Portrait (9:16, like the reference video), full quality. For each phase: our
-// screenshot next to the matching reference frame, saved in docs/screenshots/compare/.
-const DIR = 'docs/screenshots/compare';
+// Portrait (9:16, like the reference video). The game plays at Low (software GL is slow);
+// every capture is rendered at High. For each phase: our screenshot next to the matching
+// reference frame, saved in docs/screenshots/compare-v3/ (v2 kept in compare/).
+const DIR = 'docs/screenshots/compare-v3';
 
 async function sideBySide(page: Page, name: string, ref: string, ours: string): Promise<void> {
   const r = fs.readFileSync(`docs/v2/frames/${ref}`).toString('base64');
@@ -20,8 +21,7 @@ async function sideBySide(page: Page, name: string, ref: string, ours: string): 
 }
 
 test('compare each phase with the reference frames', async ({ page }) => {
-  const run = await boot(page, 4);
-  expect(await page.evaluate(() => window.__lockdown.quality())).toBe('high');
+  const run = await boot(page, 4, { lowq: true });
   await page.getByTestId('begin').click();
   await waitScene(page, 'exam');
   await expect(page.getByTestId('titlecard')).toHaveClass(/in/);
@@ -69,6 +69,6 @@ test('compare each phase with the reference frames', async ({ page }) => {
   await expect(page.getByTestId('door-keep')).toBeVisible({ timeout: 120_000 });
   await sideBySide(page, '6b-choice', '119s_choice-card.jpg', await shot(page, 'tmp-choice', DIR));
   const fps = await page.evaluate(() => window.__lockdown.fps());
-  console.log(`[report] compare: fps(headless software GL, high quality, portrait 405x720@2x)=${fps.toFixed(1)} errors=${JSON.stringify(run.errors)}`);
+  console.log(`[report] compare: fps(headless software GL, Low while playing, portrait 405x720@2x)=${fps.toFixed(1)} errors=${JSON.stringify(run.errors)}`);
   expect(run.errors).toEqual([]);
 });

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
-import { Person, type PersonLook } from './people';
+import { Person, knitMaterial, skinMaterial, type PersonLook } from './people';
 import {
   AnswerSheet,
   ClockFace,
@@ -63,12 +63,14 @@ export interface Quality {
 }
 
 const LOOKS: Record<string, PersonLook> = {
-  ines: { shirt: 0xc4485e, skin: 0x7a4b33, hair: 0x2a1a14, pants: 0x3a3f5c, hairStyle: 'short' },
-  jo: { shirt: 0x5f9f72, skin: 0xe2b494, hair: 0x6b4423, pants: 0x34405a, hairStyle: 'short' },
-  hana: { shirt: 0xe0b23a, skin: 0xd2a07a, hair: 0x15161c, pants: 0x3a3f5c, hairStyle: 'bun' },
-  malik: { shirt: 0x8a62c4, skin: 0x5a3a26, hair: 0x15161c, pants: 0x2f3550, hairStyle: 'curly' },
-  sam: { shirt: 0x4a68c0, skin: 0xe8c2a2, hair: 0x7a4f26, pants: 0x2f3550, hairStyle: 'short', scale: 1.1 },
+  ines: { shirt: 0xb04456, top: 'sweater', skin: 0x7c4e36, hair: 0x22160f, pants: 0x2e3550, hairStyle: 'long' },
+  jo: { shirt: 0x5a8f68, top: 'tee', skin: 0xdcae92, hair: 0x5e3b20, pants: 0x3a4560, hairStyle: 'short' },
+  hana: { shirt: 0xd4a43a, top: 'hoodie', skin: 0xcf9f7c, hair: 0x141210, pants: 0x30364d, hairStyle: 'bun' },
+  malik: { shirt: 0x7a5aa8, top: 'hoodie', skin: 0x5a3a28, hair: 0x121010, pants: 0x2a3048, hairStyle: 'buzz', shoes: 0x1c1d22, sole: 0x2a2a2e },
+  sam: { shirt: 0x4562a8, top: 'sweater', skin: 0xe3bca0, hair: 0x6e4524, pants: 0x2f3550, hairStyle: 'short', scale: 1.05 },
 };
+const TEACHER_LOOK: PersonLook = { shirt: 0xb88a34, top: 'cardigan', inner: 0xf2efe8, skin: 0xc99474, hair: 0x6a2e1c, pants: 0x2b3044, hairStyle: 'bun', glasses: true, scale: 1.03, face: true, eyes: [86, 64, 44], shoes: 0x3a2a22, sole: 0x2a2522 };
+const THEO_LOOK: PersonLook = { shirt: 0xa83030, top: 'hoodie', inner: 0xe8e4dc, skin: 0x7a4b33, hair: 0x121010, pants: 0x34466e, hairStyle: 'curly', face: true, eyes: [60, 38, 24], shoes: 0xe8e6e0 };
 
 const SEATS: Record<string, [number, number]> = {
   jo: [2, 0],
@@ -168,9 +170,9 @@ export class World {
   private exitLight = new THREE.PointLight(0x40ff80, 0.5, 2.4, 2);
   private sirenSpots: THREE.SpotLight[] = [];
   private panels: THREE.Mesh[] = [];
-  private panelOn = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.98, 0.93).multiplyScalar(3.0) });
+  private panelOn = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.98, 0.93).multiplyScalar(8) });
   private panelOff = std(0xd8d6cf, 0.6);
-  private outsideMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xdfe9f5).multiplyScalar(1.5) });
+  private outsideMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xdfe9f5).multiplyScalar(3.2) });
   private shafts: THREE.Mesh[] = [];
   private shaftMat: THREE.MeshBasicMaterial;
   private doorShaftMat: THREE.MeshBasicMaterial;
@@ -188,11 +190,11 @@ export class World {
   private c2 = new THREE.Color();
   private pink = new THREE.Color(1.0, 0.35, 0.7);
   private blue = new THREE.Color(0.2, 0.4, 1.0);
-  private dayOutside = new THREE.Color(0xdfe9f5).multiplyScalar(1.5);
+  private dayOutside = new THREE.Color(0xdfe9f5).multiplyScalar(3.2);
   private nightOutside = new THREE.Color(0x1b2550).multiplyScalar(0.8);
 
   constructor(
-    private lib: Library,
+    readonly lib: Library,
     private q: Quality,
   ) {
     this.useRect = q.rectLights;
@@ -341,7 +343,7 @@ export class World {
     const exit = new THREE.Group();
     exit.add(mesh(rbox(0.5, 0.22, 0.07, 0.01), std(0xeeeeea, 0.4)));
     const face = mesh(new THREE.PlaneGeometry(0.44, 0.16), new THREE.MeshBasicMaterial({ map: signTexture('EXIT', '#22a85a', '#ffffff') }));
-    (face.material as THREE.MeshBasicMaterial).color.setScalar(3.2);
+    (face.material as THREE.MeshBasicMaterial).color.setScalar(9);
     face.position.z = 0.036;
     exit.add(face);
     exit.position.set(DOOR.x, DOOR.h + 0.33, minZ + 0.04);
@@ -395,7 +397,7 @@ export class World {
     const det = mesh(new THREE.CylinderGeometry(0.07, 0.075, 0.035, 32), std(0xf2f0ea, 0.5));
     det.position.set(0.3, h - 0.018, 0.8);
     s.add(det);
-    const ledOn = mesh(new THREE.SphereGeometry(0.004, 8, 6), glow(0x40ff60, 2));
+    const ledOn = mesh(new THREE.SphereGeometry(0.004, 8, 6), glow(0x40ff60, 8));
     ledOn.position.set(0.33, h - 0.04, 0.8);
     s.add(ledOn);
     const outletMat = std(0xf0eee6, 0.4);
@@ -532,7 +534,18 @@ export class World {
       strap.scale.set(1, 1, 0.4);
       g.add(strap);
     }
-    g.add(body, pocket, zip);
+    // grab handle, zip pulls, side bottle pocket
+    const handle = mesh(new THREE.TorusGeometry(0.04, 0.008, 6, 14, Math.PI), strapMat);
+    handle.position.set(0, 0.395, 0.02);
+    const pullMat = std(0x1a1a1e, 0.35, 0.7);
+    for (const px of [-0.05, 0.06]) {
+      const pull = mesh(rbox(0.01, 0.03, 0.004, 0.002, 1), pullMat);
+      pull.position.set(px, 0.36, -0.09);
+      g.add(pull);
+    }
+    const side = mesh(rbox(0.04, 0.12, 0.1, 0.018, 2), nylon);
+    side.position.set(0.16, 0.09, 0);
+    g.add(body, pocket, zip, handle, side);
     shadows(g);
     g.position.set(x, 0, z);
     g.rotation.y = ry;
@@ -709,7 +722,7 @@ export class World {
     kick.position.set(DOOR.w / 2, 0.13, 0.027);
     d.pivot.add(kick);
     // tall narrow window: white hall light behind wired glass
-    d.window = mesh(new THREE.PlaneGeometry(0.17, 0.85), glow(0xffffff, 4.0));
+    d.window = mesh(new THREE.PlaneGeometry(0.17, 0.85), glow(0xffffff, 9));
     d.window.position.set(DOOR.w * 0.62, 1.55, 0.006);
     d.pivot.add(d.window);
     const wires = mesh(new THREE.PlaneGeometry(0.17, 0.85), new THREE.MeshPhysicalMaterial({ map: wiredGlass(), transparent: true, roughness: 0.05, clearcoat: 1, metalness: 0 }));
@@ -759,7 +772,7 @@ export class World {
     this.scene.add(num);
 
     // the strip of hall light under the door + a soft fan on the floor
-    const strip = mesh(new THREE.PlaneGeometry(DOOR.w - 0.06, 0.04), glow(0xffffff, 4.5));
+    const strip = mesh(new THREE.PlaneGeometry(DOOR.w - 0.06, 0.04), glow(0xffffff, 11));
     strip.rotation.x = -Math.PI / 2;
     strip.position.set(DOOR.x, 0.004, ROOM.minZ + 0.055);
     this.scene.add(strip);
@@ -888,26 +901,32 @@ export class World {
 
   private buildPeople(): void {
     for (const [name, look] of Object.entries(LOOKS)) {
-      const p = new Person(name, look);
-      shadows(p.root, true, false);
+      const p = new Person(name, look, this.lib);
+      shadows(p.root, true, true);
       this.people.set(name, p);
       this.scene.add(p.root);
     }
-    this.teacher = new Person('teacher', { shirt: 0xc8962e, skin: 0xd9a888, hair: 0x8a3a20, pants: 0x2f3550, hairStyle: 'bun', glasses: true, scale: 1.05 });
-    this.theo = new Person('theo', { shirt: 0xb83030, skin: 0x7a4b33, hair: 0x15161c, pants: 0x2f3f6a, hairStyle: 'curly', bigEyes: true });
+    this.teacher = new Person('teacher', TEACHER_LOOK, this.lib);
+    this.theo = new Person('theo', THEO_LOOK, this.lib);
     for (const p of [this.teacher, this.theo]) {
-      shadows(p.root, true, false);
+      shadows(p.root, true, true);
       this.people.set(p.name, p);
       this.scene.add(p.root);
     }
     const ph = this.teacherPhone;
-    ph.add(mesh(rbox(0.075, 0.15, 0.009, 0.008), std(0x1a1b20, 0.25, 0.5)));
-    this.teacherPhoneScreen = mesh(new THREE.PlaneGeometry(0.066, 0.135), glow(0xbcd0ff, 0.9));
-    this.teacherPhoneScreen.position.z = -0.005;
+    ph.add(mesh(rbox(0.075, 0.15, 0.009, 0.008), std(0x2a2c31, 0.3, 0.9)));
+    const glass = mesh(new THREE.PlaneGeometry(0.07, 0.145), new THREE.MeshPhysicalMaterial({ color: 0x050608, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.02 }));
+    glass.position.z = -0.0047;
+    glass.rotation.y = Math.PI;
+    ph.add(glass);
+    this.teacherPhoneScreen = mesh(new THREE.PlaneGeometry(0.066, 0.135), glow(0xbcd0ff, 1.6));
+    this.teacherPhoneScreen.position.z = -0.0052;
     this.teacherPhoneScreen.rotation.y = Math.PI;
     this.teacherPhoneScreen.visible = false;
-    ph.add(this.teacherPhoneScreen, this.phoneLight);
-    this.phoneLight.position.z = -0.1;
+    ph.add(this.teacherPhoneScreen);
+    // the screen light lives in the scene (intensity 0 when hidden), so showing the phone
+    // doesn't change the light count and recompile every shader
+    this.scene.add(this.phoneLight);
     ph.visible = false;
     this.scene.add(ph);
     this.resetPeople();
@@ -952,6 +971,8 @@ export class World {
     this.phoneLight.intensity = on ? 0.25 : 0;
     this.teacherPhone.position.set(t.x + 0.18, 0.62, t.z + 0.3);
     this.teacherPhone.rotation.set(-0.9, 0, 0);
+    this.teacherPhone.updateMatrixWorld();
+    this.phoneLight.position.set(0, 0, -0.1).applyMatrix4(this.teacherPhone.matrixWorld);
   }
 
   // ---------------- Noah's desk ----------------
@@ -990,8 +1011,8 @@ export class World {
     this.scene.add(pc, bottle);
 
     // first-person hands: gray sleeves (knit), natural hands, yellow pencil
-    const skin = std(0xd9a07c, 0.55);
-    const sleeve = std(0x6e7280, 0.85, 0, { normalMap: this.lib.knit.normalMap, normalScale: new THREE.Vector2(0.6, 0.6) });
+    const skin = skinMaterial(this.lib, 0xd2a07e);
+    const sleeve = knitMaterial(this.lib, 0x6e7280);
     const makeHand = (side: number) => {
       const h = new THREE.Group();
       const palm = mesh(rbox(0.075, 0.025, 0.085, 0.012, 3), skin);
@@ -1078,11 +1099,13 @@ export class World {
       r.position.set(x, ROOM.h - 0.02, 0);
       r.lookAt(x, 0, 0);
       r.userData.rect = true;
+      r.userData.base = 4.5;
       this.panelLights.push(r);
       s.add(r);
     }
     const amb = new THREE.AmbientLight(0xfff4e6, 0.9);
     amb.userData.rect = false;
+    amb.userData.base = 0.9;
     this.panelLights.push(amb);
     s.add(amb);
     s.add(this.gapLight);
@@ -1149,9 +1172,14 @@ export class World {
     this.hemi.groundColor.set(on ? 0x8a90a8 : 0x10163a);
     this.hemi.intensity = on ? 0.35 : 0.3;
     this.sun.color.set(on ? 0xfff1dc : 0x8fa2e8);
-    this.panelLights.forEach((l) => (l.visible = on && l.userData.rect === this.useRect));
+    // on/off and flicker change intensity only: the light count stays the same, so no shader
+    // recompiles (and no stutter) when the lights go out
+    this.panelLights.forEach((l) => {
+      l.visible = l.userData.rect === this.useRect;
+      l.intensity = on ? l.userData.base : 0;
+    });
     this.gapLight.visible = this.useRect;
-    this.spots.forEach((l) => (l.visible = on));
+    this.spots.forEach((l) => (l.intensity = on ? 14 : 0));
     this.panels.forEach((p) => (p.material = on ? this.panelOn : this.panelOff));
     this.hallSpot.intensity = on ? 6 : 20;
     (this.gapLight as THREE.RectAreaLight).intensity = on ? 3 : 14;
@@ -1198,7 +1226,7 @@ export class World {
     if (this.flicker > 0) {
       this.flicker = Math.max(0, this.flicker - dt);
       const on = this.flicker <= 0 || Math.sin(this.t * 53) + Math.sin(this.t * 31) > -0.3;
-      this.panelLights.forEach((l) => (l.visible = this.lightsOn && on && l.userData.rect === this.useRect));
+      this.panelLights.forEach((l) => (l.intensity = this.lightsOn && on ? l.userData.base : 0));
       this.panels.forEach((p) => (p.material = this.lightsOn && on ? this.panelOn : this.panelOff));
     }
     // daylight: dimmer as the blinds close, colder when the lights are out

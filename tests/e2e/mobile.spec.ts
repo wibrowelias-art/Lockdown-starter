@@ -1,10 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { boot, report, shot, state, waitScene } from './helpers';
+import { SHOTS, boot, report, shot, state, waitScene } from './helpers';
+
+// phones run the Low preset, so their screenshots stay Low too
 
 // Phone-sized touch run (Pixel 7 emulation): touch buttons, virtual joystick, drag-to-look, texting.
 test('mobile: touch controls and texting work', async ({ page }) => {
   const run = await boot(page, 8);
-  await shot(page, 'm1-mobile-title');
+  await shot(page, 'm1-mobile-title', SHOTS, false);
   await page.getByTestId('begin').tap();
   expect(await page.evaluate(() => window.__lockdown.quality())).toBe('low');
   for (const sc of ['exam', 'code']) {
@@ -36,7 +38,7 @@ test('mobile: touch controls and texting work', async ({ page }) => {
   await page.waitForTimeout(200);
   const yaw1 = (await page.evaluate(() => window.__lockdown.player())).yaw;
   expect(yaw1).not.toBeCloseTo(after.yaw, 2);
-  await shot(page, 'm2-mobile-lockdown');
+  await shot(page, 'm2-mobile-lockdown', SHOTS, false);
   await page.getByTestId('skip').tap();
   await waitScene(page, 'texts');
   await expect(page.getByTestId('phone-btn')).toHaveClass(/badge/, { timeout: 60_000 });
@@ -49,7 +51,7 @@ test('mobile: touch controls and texting work', async ({ page }) => {
     expect(b.y).toBeGreaterThanOrEqual(0);
   }
   await expect(page.getByTestId('msg-zoe').filter({ hasText: 'noah im scared' })).toBeInViewport();
-  await shot(page, 'm3-mobile-phone');
+  await shot(page, 'm3-mobile-phone', SHOTS, false);
   await page.getByTestId('reply-calm').tap();
   await expect.poll(async () => (await state(page)).replies[0]).toBe('calm');
   await page.getByTestId('exit').tap();

@@ -1,4 +1,4 @@
-# Room 214 (working title: Lockdown): browser demo, v2
+# Room 214 (working title: Lockdown): browser demo, v3
 
 A first-person, choice-driven story. You are Noah, sitting a Biology final in Room 214
 when the school goes into lockdown. Zoe, who you teased by text this morning, is out
@@ -10,9 +10,11 @@ with the hall pass. Theo freezes. Then someone knocks, with Zoe's voice.
 > epilogue line. You can never fight or hurt anyone. **Exit** and **Skip scene** are always
 > on screen.
 
-Low-poly toon build (Vite + TypeScript + Three.js + Web Audio). A realistic Unreal version
-only happens if the demo works. Design docs: `docs/DESIGN.md`, `docs/PROMPT.md`, and for v2
-`docs/v2/` (prompt, video breakdown, reference frames; reference only, not shipped).
+v3 is the realistic build (Vite + TypeScript + Three.js r187 + Web Audio): physically based
+materials and lights, semi-real people, and on-screen task guidance. The v2 cartoon look is
+kept at the tag `v2-cartoon` / commit 8cd6771. Design docs: `docs/DESIGN.md`, `docs/PROMPT.md`,
+`docs/v2/` (v2 prompt, video breakdown, reference frames; reference only, not shipped), asset
+licences in `docs/ASSETS.md`, realism audit in `docs/REALISM-AUDIT.md`.
 
 ## Run it
 
@@ -22,8 +24,9 @@ npm run dev                         # http://localhost:5173
 npm run build && npm run preview    # production build on http://localhost:4173
 ```
 
-URL options: `?speed=4` (story time 4x faster), `?lowq` (low quality), `?nolock` (no pointer
-lock: drag to look, click to use; used by the automated tests).
+URL options: `?speed=4` (story time 4x faster), `?preset=low|medium|high|ultra` (force a
+quality preset), `?lowq` (= `?preset=low`), `?nolock` (no pointer lock: drag to look, click to
+use; used by the automated tests). **F3** shows an FPS / frame-time / draw-call counter.
 
 ## Controls
 
@@ -39,20 +42,64 @@ lock: drag to look, click to use; used by the automated tests).
 | Phone | **Tab** (or P) | **Phone** |
 | Mute | **M** | Options |
 
-**Options:** mouse sensitivity, invert Y, sound, and **Low quality** (turns off the ink
-outlines and bloom; on by default on touch devices).
+**Options:** mouse sensitivity, invert Y, sound, **Quality** (Auto, Low, Medium, High, Ultra;
+Auto runs a 1-second benchmark at High on the title screen and picks a preset; phones and
+tablets start on Low), **Video lens** (the fisheye look of the reference video; off by default),
+and **Guidance** (Full: task card, outline in the world, key icon, edge arrow; Minimal: task
+card only; Off: nothing, only the old text hints).
+
+## Task guidance
+
+Whenever a task is active the player is told what to do and where:
+
+- a task card at the top (icon, action, distance) and the next suggested task marked in the
+  poster checklist;
+- a soft warm-white outline on the object, pulsing at ~1.5 Hz, faintly visible through
+  furniture; in the dark lockdown it is dimmer and never blooms;
+- a floating key icon (E, hold E, Space, C...) that turns into "Press E: <action>" within
+  1.2 m, with a progress ring for holds; an arrow at the screen edge when the target is
+  off-screen;
+- after 12 s idle the outline pulses harder and a classmate whispers a hint; after 25 s it
+  widens. The ringing phone gets no marker for its first 6 s (find it by sound), then a ping;
+- hold-still beats hide every marker and show only the meter: "Hold Space. Don't move.";
+- the first time each key is needed, its key cap is shown once.
+
+Shape and brightness carry the meaning, never red/green.
 
 ## Look
 
-Toon shading (3-step ramp) with ink outlines: inverted hulls on people and props, plus a
-depth+normal edge pass for the room. A fisheye lens pass (barrel distortion 0.3, about 100
-degrees wide), soft vignette, light film grain, and bloom only on the door window and strip,
-the EXIT sign, the PA rings and the siren light. Exam scenes are warm (beige walls, cream
-ceiling panels, blue-gray tiles, green board). The lockdown is navy with a pure-white door
-window and strip, and pink/blue sirens through the blinds. Panic scales with noise: the
-vignette tightens, the lens narrows a little, sound gets muffled, a thin whine fades in.
+Same room, layout and camera framing as the reference frames, made as realistic as a
+browser allows:
 
-Side-by-sides with the reference frames: `docs/screenshots/compare/`.
+- **Lens:** about 75 degrees, no fisheye (Options: Video lens for the fisheye), subtle head
+  bob and breathing sway.
+- **Light:** AgX tone mapping, physically based lights: three rect-area ceiling panels with a
+  start-up flicker plus two shadow-casting spots, hard window light through individual blind
+  slats (real slat shadows and dust shafts), the hall light fanning under the door, EXIT
+  colour spill, animated pink/blue siren lights through the blinds, a low environment fill.
+  Eye adaptation: when the lights go off, exposure ramps up over ~3 s. Lights switch by
+  intensity, so going dark never recompiles shaders.
+- **Post (checked against `three/examples/jsm` in r187):** GTAO ambient occlusion, a firefly
+  clamp, UnrealBloom on bright sources only (lamps, door window and strip, EXIT, sirens; lit
+  surfaces stay under the threshold), Bokeh depth of field only on the phone close-up,
+  OutputPass, SMAA, and a grade pass (warm exam, cold navy lockdown, vignette, light grain).
+- **Materials:** procedural PBR everywhere (see `docs/ASSETS.md`): waxed vinyl tiles with
+  grout and glossy reflection, painted block walls, acoustic ceiling tiles, laminate desks,
+  steel tubing, brushed lever, wired-glass door window, real blind slats, chalkboard, curled
+  posters, bulletin board, baseboards, outlets, switch, vent, smoke detector, clock, speaker
+  grille; biology details (anatomy poster, cell diagram, plant, microscope, textbooks,
+  student work); dust motes, haze, scuffs.
+- **People:** a clean semi-real build (no downloaded rigs): jointed limbs, knit / fleece /
+  denim fabric, skin with pores and sheen (not waxy), hair with strand normals, wet eyes that
+  blink. Only Ms. Okafor and Theo have open, readable faces, and they are never seen closer
+  than ~1 m (they look down as you come close, and you can't walk into them); the other
+  students keep their eyes down and are mostly seen from behind. Breathing, micro head
+  motion, trembling, smooth crouch/stand, walk cycles driven by distance (no foot sliding).
+- **UI:** Inter, white subtitles with a soft shadow and a small coloured speaker tag, a
+  realistic phone, clean glass panels; the checklist keeps the paper-poster look.
+
+Side-by-sides with the reference frames: `docs/screenshots/compare-v3/` (v2:
+`docs/screenshots/compare/`).
 
 ## Phases and tasks (24)
 
@@ -97,15 +144,17 @@ src/story/state.ts     state machine: phases, tasks, clues, battery, endings (un
 src/story/endings.ts   ending sequences and epilogues
 src/game/director.ts   the six phase scripts + endings (cancellable, on sim time)
 src/game/game.ts       glue: loop, tasks, interaction, pause, phone, hold-still, test hooks
-src/game/render.ts     EffectComposer: edge pass, bloom, output, fisheye/vignette/grain
-src/game/toon.ts       toon materials, inverted-hull outlines
+src/game/render.ts     presets, EffectComposer: GTAO, clamp, bloom, DOF, output, SMAA, grade
+src/game/materials.ts  procedural PBR texture library (loading screen progress)
+src/game/toon.ts       material helpers (name kept from v2)
 src/game/world.ts      Room 214 layout, props, door + light strip + feet shadows, lights
-src/game/people.ts     cartoon characters (mouth flaps, trembling, poses)
+src/game/people.ts     semi-real people (joints, fabric, skin, hair, eyes, gait)
+src/game/guidance.ts   task guidance: target picking, outlines, icons, pointer, idle help
 src/game/input.ts      pointer lock, keys, touch
 src/audio/audio.ts     Web Audio synthesis, HRTF panners, muffle, silence, whine, drone
 src/ui/                HUD, subtitles, phone, checklist, options, end screens
 tests/unit/            Vitest
-tests/e2e/             Playwright: one playthrough per ending, exit/skip/options, mobile, compare
+tests/e2e/             Playwright: one playthrough per ending, exit/skip/options, guidance bot (24 tasks), mobile, compare
 ```
 
 ## Tests

@@ -9,6 +9,10 @@ import { boot, breatheWithTheo, clickTarget, clickUntil, finishEnding, holdSpace
 
 test('ending 1 - everyone went home: every task, all six phases', async ({ page }) => {
   const run = await boot(page, 12);
+  // Auto quality: a 1-second benchmark picks the preset (headless software GL lands on Low)
+  await expect.poll(() => page.evaluate(() => window.__lockdown.autoResult()), { timeout: 30_000 }).not.toBeNull();
+  const auto = await page.evaluate(() => window.__lockdown.autoResult());
+  console.log(`[report] auto-quality: ${JSON.stringify(auto)}`);
   await shot(page, '01-title-content-notice');
   await page.getByTestId('begin').click();
   await waitScene(page, 'exam');

@@ -81,6 +81,23 @@ const GradeShader = {
     }`,
 };
 
+/** Clamp HDR fireflies (and NaNs) before bloom so one hot specular pixel can't haze the frame. */
+const ClampShader = {
+  uniforms: { tDiffuse: { value: null }, maxV: { value: 40 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float maxV;
+    varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      if (any(isnan(c.rgb)) || any(isinf(c.rgb))) c.rgb = vec3(0.0);
+      float m = max(c.r, max(c.g, c.b));
+      if (m > maxV) c.rgb *= maxV / m;
+      gl_FragColor = vec4(c.rgb, 1.0);
+    }`,
+};
+
 export class Renderer {
   three: THREE.WebGLRenderer;
   private composer: EffectComposer;
@@ -89,6 +106,7 @@ export class Renderer {
   private dofPass: BokehPass;
   private smaa: SMAAPass;
   private grade: ShaderPass;
+  private clamp: ShaderPass;
   preset: Preset = 'high';
   spec: PresetSpec = presetSpec('high');
   videoLens = false;
@@ -116,6 +134,8 @@ export class Renderer {
     this.three.toneMapping = THREE.AgXToneMapping;
     this.three.toneMappingExposure = 1;
     this.three.shadowMap.type = THREE.PCFShadowMap;
+    // count draw calls for the whole frame (all passes), reset in render()
+    this.three.info.autoReset = false;
     const pmrem = new THREE.PMREMGenerator(this.three);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     pmrem.dispose();
@@ -125,7 +145,9 @@ export class Renderer {
     this.ao.blendIntensity = 0.9;
     this.ao.updateGtaoMaterial({ radius: 0.35, distanceExponent: 1.5, thickness: 1.2, scale: 1.1, samples: 12 });
     this.composer.addPass(this.ao);
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.35, 0.35, 2.6);
+    this.clamp = new ShaderPass(ClampShader);
+    this.composer.addPass(this.clamp);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.16, 0.12, 5.0);
     this.composer.addPass(this.bloom);
     this.dofPass = new BokehPass(scene, camera, { focus: 0.35, aperture: 0.0035, maxblur: 0.008 });
     this.composer.addPass(this.dofPass);
@@ -143,6 +165,7 @@ export class Renderer {
     this.three.shadowMap.needsUpdate = true;
     this.ao.enabled = this.spec.ao;
     this.bloom.enabled = this.spec.bloom;
+    this.clamp.enabled = this.spec.bloom;
     this.smaa.enabled = this.spec.smaa;
     this.resize();
   }
@@ -197,6 +220,7 @@ export class Renderer {
     g.vignette.value = this.videoLens ? 0.5 : 0.32;
     this.dofPass.enabled = this.spec.dof && this.closeUp;
     this.updateFov();
+    this.three.info.reset();
     this.composer.render(dt);
   }
 }

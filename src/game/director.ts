@@ -78,9 +78,9 @@ export async function examScene(g: Game, s: Script): Promise<void> {
   // Ms. Okafor walks the aisle beside you: hold still (teaches stillness, harmlessly)
   teacher.setPose('stand');
   const walking = g.walk(teacher, [
-    [1.8, -3.0],
-    [1.8, 2.9],
-    [1.8, -3.0],
+    [1.92, -3.0],
+    [1.92, 2.9],
+    [1.92, -3.0],
     [-0.6, -3.85],
   ], 0.75);
   await s.wait(5);

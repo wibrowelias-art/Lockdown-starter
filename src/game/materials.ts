@@ -366,6 +366,87 @@ export function fabric(kind: 'knit' | 'twill' | 'nylon', size = 256): { normalMa
   return { normalMap: tex(normalFromHeight(h, size, size, kind === 'knit' ? 3 : 1.5), false), roughnessMap: tex(greyCanvas(rough, size, size), false) };
 }
 
+/** Hair: fine strands (straight) or tight curls; normal + roughness, colour from the material. */
+export function hairSet(kind: 'strand' | 'curl', size = 256): { normalMap: THREE.Texture; roughnessMap: THREE.Texture } {
+  const r = rng(kind === 'strand' ? 71 : 72);
+  const h = new Float32Array(size * size);
+  const n = fbm(size, size, 16, 3, kind === 'strand' ? 73 : 74);
+  if (kind === 'strand') {
+    // strands run along v; each column gets its own phase and thickness
+    const phase = new Float32Array(size).map(() => r() * Math.PI * 2);
+    for (let y = 0; y < size; y++)
+      for (let x = 0; x < size; x++) {
+        const wob = Math.sin((y / size) * Math.PI * 4 + phase[x]) * 1.5;
+        const xx = x + wob + n[y * size + x] * 6;
+        h[y * size + x] = 0.5 + 0.35 * Math.sin(xx * 1.9) + 0.15 * Math.sin(xx * 0.7 + phase[x]);
+      }
+  } else {
+    for (let i = 0; i < 900; i++) {
+      const cx = r() * size;
+      const cy = r() * size;
+      const rad = 4 + r() * 5;
+      for (let dy = -10; dy <= 10; dy++)
+        for (let dx = -10; dx <= 10; dx++) {
+          const d = Math.hypot(dx, dy);
+          if (d > rad + 1.5) continue;
+          const x = (Math.floor(cx + dx) + size) % size;
+          const y = (Math.floor(cy + dy) + size) % size;
+          const ring = Math.cos(((d - rad) / 1.5) * Math.PI * 0.5);
+          h[y * size + x] = Math.max(h[y * size + x], Math.max(0, ring));
+        }
+    }
+  }
+  const rough = new Float32Array(size * size).map((_, i) => 0.42 + n[i] * 0.2);
+  return { normalMap: tex(normalFromHeight(h, size, size, kind === 'strand' ? 1.4 : 2.2), false), roughnessMap: tex(greyCanvas(rough, size, size), false) };
+}
+
+/** Skin: fine pores and soft colour variation (no waxy flat look). */
+export function skinSet(size = 256): PBRSet {
+  const r = rng(81);
+  const n = fbm(size, size, 8, 4, 82);
+  const h = new Float32Array(size * size).map((_, i) => n[i] * 0.4);
+  for (let i = 0; i < size * size * 0.06; i++) h[Math.floor(r() * size * size)] -= 0.25;
+  const [a, g] = canvas(size);
+  const img = g.createImageData(size, size);
+  for (let i = 0; i < size * size; i++) {
+    const v = 0.93 + n[i] * 0.07;
+    img.data[i * 4] = 255 * Math.min(1, v + 0.015);
+    img.data[i * 4 + 1] = 255 * v;
+    img.data[i * 4 + 2] = 255 * (v - 0.01);
+    img.data[i * 4 + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const rough = new Float32Array(size * size).map((_, i) => 0.5 + n[i] * 0.16);
+  return set(a, normalFromHeight(h, size, size, 1.6), greyCanvas(rough, size, size));
+}
+
+/** Iris in polar layout for a sphere cap: top row = pupil centre, bottom row = limbus, columns = angle. */
+export function irisTexture(color: [number, number, number], seed = 91): THREE.CanvasTexture {
+  const S = 64;
+  const [c, g] = canvas(S);
+  const r = rng(seed);
+  const fib = new Float32Array(S).map(() => 0.75 + r() * 0.4);
+  const img = g.createImageData(S, S);
+  for (let y = 0; y < S; y++) {
+    const t = y / (S - 1);
+    for (let x = 0; x < S; x++) {
+      let k: number;
+      if (t < 0.36) k = 0.04;
+      else if (t > 0.88) k = 0.35 - (t - 0.88) * 1.5;
+      else k = (t < 0.5 ? 0.6 : 1) * fib[x] * (1 - (t - 0.36) * 0.35);
+      const i = (y * S + x) * 4;
+      img.data[i] = color[0] * k;
+      img.data[i + 1] = color[1] * k;
+      img.data[i + 2] = color[2] * k;
+      img.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 /** Chalkboard: green slate, chalk dust smudges, chalk writing (passed as a drawing callback). */
 export function chalkboard(draw: (g: Ctx, w: number, h: number) => void): PBRSet {
   const w = 1024;
@@ -489,6 +570,9 @@ export async function buildLibrary(onProgress: (p: number, label: string) => voi
   steps.push(['knit', () => (lib.knit = fabric('knit'))]);
   steps.push(['twill', () => (lib.twill = fabric('twill'))]);
   steps.push(['nylon', () => (lib.nylon = fabric('nylon'))]);
+  steps.push(['hair', () => (lib.hair = hairSet('strand'))]);
+  steps.push(['curls', () => (lib.curls = hairSet('curl'))]);
+  steps.push(['skin', () => (lib.skin = skinSet())]);
   for (let i = 0; i < steps.length; i++) {
     onProgress(i / steps.length, steps[i][0]);
     await new Promise((r) => setTimeout(r, 0));
@@ -509,4 +593,7 @@ export interface Library {
   knit: { normalMap: THREE.Texture; roughnessMap: THREE.Texture };
   twill: { normalMap: THREE.Texture; roughnessMap: THREE.Texture };
   nylon: { normalMap: THREE.Texture; roughnessMap: THREE.Texture };
+  hair: { normalMap: THREE.Texture; roughnessMap: THREE.Texture };
+  curls: { normalMap: THREE.Texture; roughnessMap: THREE.Texture };
+  skin: PBRSet;
 }

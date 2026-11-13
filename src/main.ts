@@ -1,6 +1,10 @@
-import '@fontsource/fredoka/500.css';
-import '@fontsource/fredoka/600.css';
-import '@fontsource/fredoka/700.css';
+import '@fontsource/inter/300.css';
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
+import '@fontsource/caveat/600.css';
+import '@fontsource/caveat/700.css';
 import './ui/styles.css';
 import { Game } from './game/game';
 import { buildLibrary } from './game/materials';
@@ -30,7 +34,7 @@ async function start(): Promise<void> {
   // canvas textures (board, answer sheet, poster) need the rounded font loaded first
   try {
     await Promise.race([
-      Promise.all(['500', '600', '700'].map((w) => document.fonts.load(`${w} 40px Fredoka`))),
+      Promise.all([...['300', '400', '500', '600', '700'].map((w) => document.fonts.load(`${w} 40px Inter`)), document.fonts.load('600 40px Caveat'), document.fonts.load('700 40px Caveat')]),
       new Promise((r) => setTimeout(r, 2500)),
     ]);
   } catch {
@@ -50,6 +54,8 @@ async function start(): Promise<void> {
     bar.style.width = `${Math.round(p * 100)}%`;
     label.textContent = `Preparing the room: ${what}`;
   }, forced === 'low' || coarse ? 'low' : 'high');
+  label.textContent = 'Preparing the room: warming up shaders';
+  await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
   const game = new Game(canvas, app, speed, { noLock: params.has('nolock'), preset: forced ?? undefined, lib });
   load.remove();
   // Hooks for automated playthroughs (Playwright) and debugging.
@@ -65,11 +71,22 @@ async function start(): Promise<void> {
     walkTo: (x: number, z: number) => game.walkTo(x, z),
     breath: () => ({ ...game.breath }),
     lightsOn: () => game.world.lightsOn,
+    faceMin: () => game.faceMin,
+    faceMinAt: () => game.faceMinAt,
     frames: () => game.frames,
     fps: () => game.fps,
     simTime: () => game.clock.time,
     momReply: () => (window as unknown as { __momReply?: () => void }).__momReply?.(),
     quality: () => game.renderer.preset,
+    autoResult: () => game.autoResult,
+    /** Screenshots: render at High for a capture without touching the saved settings. */
+    hq: (on: boolean) => {
+      if (on) {
+        game.renderer.setPreset('high');
+        game.world.applyQuality(game.renderer.spec);
+      } else game.applySettings(game.settings);
+    },
+    compileMs: () => game.compileMs,
     lookAt: (x: number, y: number, z: number) => game.lookAtPoint(x, y, z),
     holdUse: (down: boolean) => (game.input.holdingUse = down),
     holdingSheet: () => game.flags.holdingSheet,
@@ -86,9 +103,10 @@ async function start(): Promise<void> {
       game.applySettings(game.settings);
     },
     world: () => game.world,
-    setYaw: (y: number) => {
+    renderer: () => game.renderer,
+    setYaw: (y: number, pitch = 0) => {
       game.player.yaw = y;
-      game.player.pitch = 0;
+      game.player.pitch = pitch;
     },
     yawTo: (id: string) => {
       const p = game.targetPos(id);

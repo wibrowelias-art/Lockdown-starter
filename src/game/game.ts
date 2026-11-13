@@ -19,12 +19,11 @@ import { type ChecklistItem, type Settings, UI, type Who } from '../ui/ui';
 import { Cancelled, Script, SimClock, Tweens, linear } from './clock';
 import { codeScene, doorScene, endingScene, examScene, lockdownScene, textsScene, waitingScene } from './director';
 import { Input } from './input';
-import type { Person, Pose } from './people';
+import { type Person, type Pose, buildHand, knitMaterial, skinMaterial } from './people';
 import { Player } from './player';
 import { type Preset, Renderer, presetSpec } from './render';
 import type { Library } from './materials';
 import { GUIDE_LAYER, Guidance } from './guidance';
-import { outline, toon } from './toon';
 import { AISLE_X, DOOR, HUDDLE, NOAH_WALL_SPOT, PA_POS, PLAYER_DESK, ROOM, SEAT, SWITCH_POS, World, inDoorWallZone } from './world';
 
 interface Interactable {
@@ -100,6 +99,9 @@ const PHASE_TASKS: Partial<Record<SceneId, TaskId[]>> = {
   door: ['readTiming', 'decide'],
 };
 
+/** Screen centre (crosshair), shared to avoid per-frame allocations. */
+const CENTER = new THREE.Vector2(0, 0);
+
 export class Game {
   store = new Store();
   clock = new SimClock();
@@ -148,6 +150,7 @@ export class Game {
   phoneHasBuzzed = false;
   frames = 0;
   fps = 0;
+  fpsMs = 0;
   private fpsAcc = { t: 0, n: 0 };
   private touchApplied = false;
   private panic = 0;
@@ -225,7 +228,48 @@ export class Game {
     this.player.sitAt(SEAT.x, SEAT.z);
     this.ui.reset();
     this.showTitle();
+    this.precompile();
+    if (!opts.preset && this.settings.quality === 'auto') this.startBenchmark();
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'F3') {
+        e.preventDefault();
+        this.ui.toggleFps();
+      }
+    });
     requestAnimationFrame(this.frame);
+  }
+
+  /** Compile every visible material up front (lights only change intensity, so one pass covers lights on and off). */
+  precompile(): void {
+    const t0 = performance.now();
+    this.renderer.three.compile(this.world.scene, this.camera);
+    this.compileMs = performance.now() - t0;
+  }
+  compileMs = 0;
+
+  /** Auto quality: 1 s of frames at High on the title screen picks the preset. */
+  autoResult: { fps: number; preset: Preset } | null = null;
+  private bench: { skip: number; t: number; n: number } | null = null;
+  startBenchmark(): void {
+    this.autoPreset = 'high';
+    this.applySettings(this.settings);
+    this.bench = { skip: 10, t: 0, n: 0 };
+  }
+  private stepBenchmark(realMs: number): void {
+    const b = this.bench!;
+    if (b.skip > 0) {
+      b.skip--;
+      return;
+    }
+    b.t += realMs;
+    b.n++;
+    if (b.t < 1000) return;
+    const fps = (b.n * 1000) / b.t;
+    const preset: Preset = fps >= 90 ? 'ultra' : fps >= 50 ? 'high' : fps >= 28 ? 'medium' : 'low';
+    this.bench = null;
+    this.autoResult = { fps, preset };
+    this.autoPreset = preset;
+    if (this.settings.quality === 'auto') this.applySettings(this.settings);
   }
 
   get touch(): boolean {
@@ -943,15 +987,62 @@ export class Game {
     });
   }
 
+  /** Faces (Ms. Okafor, Theo) are never seen closer than ~1 m: they look down/away as you approach. */
+  faceMin = Infinity;
+  private faceV = new THREE.Vector3();
+  private camV = new THREE.Vector3();
+  faceMinAt = '';
+  /** Personal space: standing or crouched, the camera stays ~1 m from these two faces. */
+  private keepFaceDistance(): void {
+    if (this.player.stance === 'seated') return;
+    const w = this.world;
+    for (const p of [w.teacher, w.theo]) {
+      if (!p.root.visible) continue;
+      p.head.getWorldPosition(this.faceV);
+      this.faceV.y += 0.1 * p.root.scale.y;
+      const dy = this.player.eye - this.faceV.y;
+      const need = Math.sqrt(Math.max(0, 1.04 * 1.04 - dy * dy));
+      const dx = this.player.x - this.faceV.x;
+      const dz = this.player.z - this.faceV.z;
+      const d = Math.hypot(dx, dz);
+      if (d < need) {
+        const k = d > 1e-4 ? need / d : 1;
+        this.player.x = this.faceV.x + (d > 1e-4 ? dx * k : need);
+        this.player.z = this.faceV.z + (d > 1e-4 ? dz * k : 0);
+      }
+    }
+  }
+  private updateFaces(dt: number): void {
+    const w = this.world;
+    this.camera.getWorldPosition(this.camV);
+    const sc = this.store.state.scene;
+    const playing = sc !== 'title' && sc !== 'exited';
+    for (const p of [w.teacher, w.theo]) {
+      if (!p.root.visible) continue;
+      p.head.getWorldPosition(this.faceV);
+      this.faceV.y += 0.1 * p.root.scale.y;
+      const d = this.faceV.distanceTo(this.camV);
+      if (playing && d < this.faceMin) {
+        this.faceMin = d;
+        this.faceMinAt = `${p.name} ${sc} player(${this.player.x.toFixed(2)},${this.player.z.toFixed(2)},${this.player.stance}) face(${this.faceV.x.toFixed(2)},${this.faceV.y.toFixed(2)},${this.faceV.z.toFixed(2)})`;
+      }
+      const want = THREE.MathUtils.clamp((1.2 - d) / 0.3, 0, 1);
+      p.shy += (want - p.shy) * Math.min(1, dt * 6);
+    }
+  }
+
   private buildRaisedHands(): void {
+    const skin = skinMaterial(this.world.lib, 0xd2a07e);
+    const sleeve = knitMaterial(this.world.lib, 0x6e7280);
     for (const sx of [-1, 1]) {
       const h = new THREE.Group();
-      const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.3, 4, 10), toon(0x7a7f8f));
-      arm.position.y = -0.18;
-      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.065, 12, 10), toon(0xf0c09a));
-      hand.scale.set(1, 1.2, 0.6);
-      h.add(arm, hand);
-      outline(h, 0.006);
+      const hand = buildHand(skin, sx);
+      hand.rotation.set(0, (sx * Math.PI) / 2, Math.PI); // fingers up, palm out
+      const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.046, 0.3, 4, 12), sleeve);
+      arm.position.y = -0.21;
+      const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.009, 6, 16).rotateX(Math.PI / 2), sleeve);
+      cuff.position.y = -0.045;
+      h.add(hand, arm, cuff);
       h.position.set(sx * 0.32, 0.02, -0.5);
       h.rotation.z = -sx * 0.2;
       this.raisedHands.add(h);
@@ -1181,7 +1272,7 @@ export class Game {
 
   /** Is the crosshair on this object (ignoring range)? */
   gazing(obj: THREE.Object3D, maxDist = 12): boolean {
-    this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    this.raycaster.setFromCamera(CENTER, this.camera);
     const h = this.raycaster.intersectObject(obj, true)[0];
     return !!h && h.distance < maxDist;
   }
@@ -1241,9 +1332,16 @@ export class Game {
     this.last = now;
     this.fpsAcc.t += realMs;
     this.fpsAcc.n++;
-    if (this.fpsAcc.t >= 1000) {
+    if (this.bench) this.stepBenchmark(realMs);
+    if (this.fpsAcc.t >= 500) {
       this.fps = (this.fpsAcc.n * 1000) / this.fpsAcc.t;
-      this.fpsAcc = { t: 0, n: 0 };
+      this.fpsMs = this.fpsAcc.t / this.fpsAcc.n;
+      this.fpsAcc.t = 0;
+      this.fpsAcc.n = 0;
+      if (this.ui.fpsOn) {
+        const info = this.renderer.three.info;
+        this.ui.setFps(`${this.fps.toFixed(0)} fps · ${this.fpsMs.toFixed(1)} ms · ${this.renderer.preset}${this.settings.quality === 'auto' ? ' (auto)' : ''} · ${info.render.calls} draws · ${(info.render.triangles / 1000).toFixed(0)}k tris`);
+      }
     }
     const realDt = Math.min(this.clock.speed > 1 ? 0.25 : 0.1, realMs / 1000);
     const dt = this.flags.paused ? 0 : realDt * this.clock.speed;
@@ -1265,6 +1363,7 @@ export class Game {
     if (this.player.stance === 'seated' && this.player.canMove && (mv.x || mv.y)) this.leaveSeat('stand');
     const hurry = this.input.hurry && this.player.canMove && (mv.x !== 0 || mv.y !== 0);
     this.player.update(dt, mv, this.world.colliders, hurry);
+    this.keepFaceDistance();
 
     this.clock.tick(dt);
     this.tweens.update(dt);
@@ -1283,6 +1382,7 @@ export class Game {
     if (prevTask !== this.guidance.state.task) this.updateChecklist();
     this.ui.setHolding(this.hold.active);
     this.updatePanic(realDt);
+    this.updateFaces(dt);
 
     this.player.applyTo(this.camera);
     this.audio.setListener({ x: this.player.x, y: this.player.eye, z: this.player.z }, this.player.yaw);
@@ -1323,8 +1423,8 @@ export class Game {
       // Theo follows you, crouched
       if (this.flags.theoFollowing && !st.tasks.theoDown) {
         const t = w.theo.root.position;
-        const tx = p.x + 0.55;
-        const tz = p.z + 0.45;
+        const tx = p.x + 1.1;
+        const tz = p.z + 0.85;
         const d = Math.hypot(tx - t.x, tz - t.z);
         if (d > 0.05) {
           const step = Math.min(d, 1.6 * dt);
@@ -1333,7 +1433,7 @@ export class Game {
           t.z += ((tz - t.z) / d) * step;
           w.theo.walking = d > 0.2;
         } else w.theo.walking = false;
-        if (inDoorWallZone(p.x, p.z) && Math.hypot(t.x - p.x, t.z - p.z) < 1.3) {
+        if (inDoorWallZone(p.x, p.z) && Math.hypot(t.x - p.x, t.z - p.z) < 1.75) {
           this.flags.theoFollowing = false;
           w.theo.walking = false;
           this.task('theoDown');

@@ -22,6 +22,9 @@ declare global {
       simTime: () => number;
       fps: () => number;
       quality: () => string;
+      hq: (on: boolean) => void;
+      autoResult: () => { fps: number; preset: string } | null;
+      faceMin: () => number;
       holdUse: (down: boolean) => void;
       holdingSheet: () => boolean;
       theoFollowing: () => boolean;
@@ -60,16 +63,20 @@ export async function setSpeed(page: Page, n: number): Promise<void> {
 }
 
 /** Screenshot with sim time frozen, so slow software-GL captures don't eat timed windows. */
-export async function shot(page: Page, name: string, dir = SHOTS): Promise<string> {
+export async function shot(page: Page, name: string, dir = SHOTS, hq = true): Promise<string> {
   fs.mkdirSync(dir, { recursive: true });
   const speed = await page.evaluate(() => {
     const s = window.__lockdown.getSpeed();
     window.__lockdown.setSpeed(0);
     return s;
   });
+  // the game plays at Low in headless tests (software GL); every capture is rendered at High
+  if (hq) await page.evaluate(() => window.__lockdown.hq(true));
+  await page.evaluate(() => new Promise((r) => { let n = 0; const f = () => (++n >= 3 ? r(0) : requestAnimationFrame(f)); requestAnimationFrame(f); }));
   await page.waitForTimeout(250);
   const file = path.join(dir, `${name}.png`);
-  await page.screenshot({ path: file });
+  await page.screenshot({ path: file, timeout: 180_000 });
+  if (hq) await page.evaluate(() => window.__lockdown.hq(false));
   await page.evaluate((s) => window.__lockdown.setSpeed(s), speed);
   return file;
 }
