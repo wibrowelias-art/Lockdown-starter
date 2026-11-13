@@ -1300,7 +1300,7 @@ export class Game {
     this.dispatch({ type: 'FILL_BUBBLE', index: row });
   }
 
-  private pick(clientX: number, clientY: number): { it: Interactable; hit: THREE.Intersection } | null {
+  pick(clientX: number, clientY: number): { it: Interactable; hit: THREE.Intersection } | null {
     const r = this.canvas.getBoundingClientRect();
     const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);

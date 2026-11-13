@@ -8,3 +8,4 @@ Saved/
 Intermediate/
 DerivedDataCache/
 Binaries/
+tests/e2e/zz-*.spec.ts

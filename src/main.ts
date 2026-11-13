@@ -73,6 +73,11 @@ async function start(): Promise<void> {
     lightsOn: () => game.world.lightsOn,
     faceMin: () => game.faceMin,
     faceMinAt: () => game.faceMinAt,
+    /** debug: which interactable a click at (x, y) would use */
+    pickAt: (x: number, y: number) => {
+      const t = game.pick(x, y);
+      return t ? { id: t.it.id, dist: +t.hit.distance.toFixed(2), obj: t.hit.object.name || t.hit.object.type } : null;
+    },
     frames: () => game.frames,
     fps: () => game.fps,
     simTime: () => game.clock.time,
