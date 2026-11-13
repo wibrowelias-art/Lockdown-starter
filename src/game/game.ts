@@ -593,10 +593,16 @@ export class Game {
       const face = m.p === this.world.teacher || m.p === this.world.theo;
       if (!m.detoured && m.path.length && face) this.detourAroundPlayer(m);
       // and pause (up to 2 s) rather than bring the face inside 1 m in front of the camera
-      if (face && m.path.length && (m.waited ?? 0) < 2 && this.faceStepTooClose(m, budget)) {
-        m.waited = (m.waited ?? 0) + dt;
-        m.p.walking = false;
-        continue;
+      if (face && m.path.length && this.faceStepTooClose(m, budget)) {
+        if ((m.waited ?? 0) < 2) {
+          m.waited = (m.waited ?? 0) + dt;
+          m.p.walking = false;
+          continue;
+        }
+        // waited long enough: step round the player instead of walking through
+        m.waited = 0;
+        m.detoured = false;
+        this.detourAroundPlayer(m);
       }
       while (budget > 0 && m.path.length) {
         const [tx, tz] = m.path[0];
@@ -654,7 +660,7 @@ export class Game {
     const cx = pos.x + sx * k;
     const cz = pos.z + sz * k;
     const d = Math.hypot(cx - px, cz - pz);
-    if (d > 1.25 || k <= 0.02 || k >= 0.98) return;
+    if (d > 1.25 || k >= 0.98) return;
     // go round on the side the leg already passes, 1.35 m from the player
     let nx = -sz / len;
     let nz = sx / len;

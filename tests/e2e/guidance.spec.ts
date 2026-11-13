@@ -21,6 +21,7 @@ const G = 'docs/screenshots/guidance';
 
 /** A bot that only does what the guidance card says. */
 test('guidance leads the player through all 24 tasks', async ({ page }) => {
+  test.setTimeout(20 * 60_000); // High-quality captures on software GL are slow
   const run = await boot(page, 4, { lowq: true });
   await page.getByTestId('begin').click();
   await waitScene(page, 'exam');

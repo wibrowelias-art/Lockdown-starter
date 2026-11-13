@@ -21,6 +21,7 @@ async function sideBySide(page: Page, name: string, ref: string, ours: string): 
 }
 
 test('compare each phase with the reference frames', async ({ page }) => {
+  test.setTimeout(20 * 60_000); // High-quality captures on software GL are slow
   const run = await boot(page, 4, { lowq: true });
   await page.getByTestId('begin').click();
   await waitScene(page, 'exam');

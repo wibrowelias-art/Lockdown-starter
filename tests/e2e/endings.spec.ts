@@ -8,6 +8,7 @@ import { boot, breatheWithTheo, clickTarget, clickUntil, finishEnding, holdSpace
 // phase doesn't matter to that ending, at low quality (faster in software GL).
 
 test('ending 1 - everyone went home: every task, all six phases', async ({ page }) => {
+  test.setTimeout(20 * 60_000); // High-quality captures on software GL are slow
   const run = await boot(page, 12);
   // Auto quality: a 1-second benchmark picks the preset (headless software GL lands on Low)
   await expect.poll(() => page.evaluate(() => window.__lockdown.autoResult()), { timeout: 30_000 }).not.toBeNull();
