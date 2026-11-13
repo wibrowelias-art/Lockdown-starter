@@ -1569,9 +1569,11 @@ export class Game {
           t.x += ux * step;
           t.z += uz * step;
         }
-        // Noah coming at him: Theo backs off (faster than a crouch walk), so his face stays ~1 m away
-        const bx = t.x - p.x;
-        const bz = t.z - p.z;
+        // Noah coming at him: Theo backs off (faster than a crouch walk), so his face (not just
+        // his feet: he leans forward) stays ~1 m away
+        w.theo.head.getWorldPosition(this.faceV);
+        const bx = this.faceV.x - p.x;
+        const bz = this.faceV.z - p.z;
         const bd = Math.hypot(bx, bz);
         const backing = bd < 1.2 && bd > 1e-3;
         if (backing) {

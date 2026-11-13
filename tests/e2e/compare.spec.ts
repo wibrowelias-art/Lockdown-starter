@@ -55,8 +55,10 @@ test('compare each phase with the reference frames', async ({ page }) => {
   await page.waitForTimeout(500);
   await page.evaluate(() => window.__lockdown.lookAt(2.6, 0.3, -4.5));
   await sideBySide(page, '5-wait-feet', '073s_feet-shadows-under-door.jpg', await shot(page, 'tmp-wait', DIR));
-  await setSpeed(page, 6);
-  await expect(page.getByText(/sirens are|Sirens\./).first()).toBeVisible({ timeout: 120_000 });
+  await setSpeed(page, 4);
+  // wait on the game state (the "Sirens." subtitle is on screen for a split second at speed)
+  await page.waitForFunction(() => (window.__lockdown as unknown as { world: () => { sirenLevel: number } }).world().sirenLevel > 0.6, null, { timeout: 180_000 });
+  await setSpeed(page, 0.5);
   await page.evaluate(() => window.__lockdown.lookAt(-4.5, 2.2, 0.1));
   await page.waitForTimeout(600);
   await sideBySide(page, '5b-sirens', '082s_siren-pink-blinds.jpg', await shot(page, 'tmp-siren', DIR));
