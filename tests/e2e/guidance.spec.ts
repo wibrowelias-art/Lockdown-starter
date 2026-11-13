@@ -143,7 +143,8 @@ test('guidance leads the player through all 24 tasks', async ({ page }) => {
           await page.evaluate(() => window.__lockdown.navToTarget('spareSheet', 1.0));
           await clickUntil(page, 'spareSheet', () => page.evaluate(() => window.__lockdown.holdingSheet()));
         } else {
-          await page.evaluate(() => window.__lockdown.navTo(2.1, -3.6, 0.25));
+          // straight in front of the door (Ms. Okafor may already be crouched on the left)
+          await page.evaluate(() => window.__lockdown.navTo(2.75, -3.45, 0.25));
           await clickUntil(page, 'doorWindow', async () => (await state(page)).tasks.coverWindow);
         }
         break;
