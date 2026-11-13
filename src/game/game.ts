@@ -1024,7 +1024,18 @@ export class Game {
   private faceV = new THREE.Vector3();
   private camV = new THREE.Vector3();
   faceMinAt = '';
-  /** Personal space: you can't step closer than ~1 m to these two faces (they never shove you). */
+  private fwdV = new THREE.Vector3();
+  /** How much the body faces a point: 1 straight at it, <= 0 the point is behind them. */
+  private facing(p: Person, x: number, y: number, z: number): number {
+    // body facing (not the head, which itself turns away when you come close)
+    p.root.getWorldDirection(this.fwdV); // +z of the body = its back
+    const dx = x - this.faceV.x;
+    const dy = y - this.faceV.y;
+    const dz = z - this.faceV.z;
+    const l = Math.hypot(dx, dy, dz) || 1;
+    return -(this.fwdV.x * dx + this.fwdV.y * dy + this.fwdV.z * dz) / l;
+  }
+  /** Personal space: in front of these two faces you can't step closer than ~1 m (they never shove you). */
   private keepFaceDistance(prevX: number, prevZ: number): void {
     if (this.player.stance === 'seated') return;
     const w = this.world;
@@ -1032,6 +1043,7 @@ export class Game {
       if (!p.root.visible) continue;
       p.head.getWorldPosition(this.faceV);
       this.faceV.y += 0.1 * p.root.scale.y;
+      if (this.facing(p, this.player.x, this.player.eye, this.player.z) < 0) continue;
       const dy = this.player.eye - this.faceV.y;
       const need = Math.sqrt(Math.max(0, 1.04 * 1.04 - dy * dy));
       const dx = this.player.x - this.faceV.x;
@@ -1060,11 +1072,13 @@ export class Game {
       p.head.getWorldPosition(this.faceV);
       this.faceV.y += 0.1 * p.root.scale.y;
       const d = this.faceV.distanceTo(this.camV);
-      if (playing && d < this.faceMin) {
+      // only a face you are in front of counts as seen (behind/beside it you see hair and shoulders)
+      const front = this.facing(p, this.camV.x, this.camV.y, this.camV.z) > 0;
+      if (playing && front && d < this.faceMin) {
         this.faceMin = d;
         this.faceMinAt = `${p.name} ${sc} player(${this.player.x.toFixed(2)},${this.player.z.toFixed(2)},${this.player.stance}) face(${this.faceV.x.toFixed(2)},${this.faceV.y.toFixed(2)},${this.faceV.z.toFixed(2)})`;
       }
-      const want = THREE.MathUtils.clamp((1.2 - d) / 0.3, 0, 1);
+      const want = front ? THREE.MathUtils.clamp((1.2 - d) / 0.3, 0, 1) : 0;
       p.shy += (want - p.shy) * Math.min(1, dt * 6);
     }
   }
