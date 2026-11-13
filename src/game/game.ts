@@ -1042,6 +1042,8 @@ export class Game {
     const w = this.world;
     for (const p of [w.teacher, w.theo]) {
       if (!p.root.visible) continue;
+      // a following Theo is no obstacle: he backs off himself (see updateTasks)
+      if (p === w.theo && this.flags.theoFollowing) continue;
       p.head.getWorldPosition(this.faceV);
       this.faceV.y += 0.1 * p.root.scale.y;
       if (this.facing(p, this.player.x, this.player.eye, this.player.z) < 0) continue;
@@ -1253,7 +1255,7 @@ export class Game {
       {
         id: 'doorWindow',
         objects: () => [w.door.window],
-        range: 1.6,
+        range: 2.0,
         enabled: () => lockdown() && this.flags.holdingSheet && !this.store.state.tasks.coverWindow,
         label: () => 'Cover the door window',
         use: () => {
@@ -1527,8 +1529,18 @@ export class Game {
           w.theo.faceTowards(t.x + ux, t.z + uz);
           t.x += ux * step;
           t.z += uz * step;
-          w.theo.walking = d > 0.2;
-        } else w.theo.walking = false;
+        }
+        // Noah coming at him: Theo backs off (faster than a crouch walk), so his face stays ~1 m away
+        const bx = t.x - p.x;
+        const bz = t.z - p.z;
+        const bd = Math.hypot(bx, bz);
+        const backing = bd < 1.2 && bd > 1e-3;
+        if (backing) {
+          const back = Math.min(1.2 - bd, 2.2 * dt);
+          t.x = THREE.MathUtils.clamp(t.x + (bx / bd) * back, ROOM.minX + 0.3, ROOM.maxX - 0.3);
+          t.z = THREE.MathUtils.clamp(t.z + (bz / bd) * back, ROOM.minZ + 0.3, ROOM.maxZ - 0.3);
+        }
+        w.theo.walking = backing || d > 0.2;
         if (inDoorWallZone(p.x, p.z) && Math.hypot(t.x - p.x, t.z - p.z) < 1.75) {
           this.flags.theoFollowing = false;
           w.theo.walking = false;

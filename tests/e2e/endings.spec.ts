@@ -41,8 +41,10 @@ test('ending 1 - everyone went home: every task, all six phases', async ({ page 
   await page.keyboard.press('c');
   await expect.poll(() => task(page, 'dropDown')).toBe(true);
 
-  // 3 lockdown: free order, 75 s
+  // 3 lockdown: free order, 75 s of story time. Played at speed 3: every click and aim
+  // takes real time (slow software GL), which at speed 12 eats most of the timer.
   await waitScene(page, 'lockdown');
+  await setSpeed(page, 3);
   await expect(page.getByTestId('task-wallByDoor')).toBeVisible();
   await shot(page, '04-lockdown-start');
   await page.getByTestId('phone-btn').click();
@@ -67,6 +69,7 @@ test('ending 1 - everyone went home: every task, all six phases', async ({ page 
   for (const t of ['wallByDoor', 'theoDown', 'blinds', 'coverWindow', 'barricade', 'ringingPhone', 'silencePhone']) expect(lock.tasks[t], t).toBe(true);
   await page.evaluate(() => window.__lockdown.aim('door'));
   await waitScene(page, 'texts', 90_000);
+  await setSpeed(page, 12);
   await shot(page, '05-lockdown-done');
 
   // 4 phone: three rounds, the test question, Mom, cover the glow
