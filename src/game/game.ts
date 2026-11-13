@@ -40,6 +40,8 @@ interface Mover {
   path: [number, number][];
   speed: number;
   done: () => void;
+  /** already stepped around the player once on this walk */
+  detoured?: boolean;
 }
 
 const FOUND_KEY = 'room214.endings';
@@ -582,6 +584,8 @@ export class Game {
     for (const m of this.movers) {
       const pos = m.p.root.position;
       let budget = m.speed * dt;
+      // Ms. Okafor and Theo step around the player instead of walking into the camera
+      if (!m.detoured && m.path.length && (m.p === this.world.teacher || m.p === this.world.theo)) this.detourAroundPlayer(m);
       while (budget > 0 && m.path.length) {
         const [tx, tz] = m.path[0];
         const dx = tx - pos.x;
@@ -606,6 +610,34 @@ export class Game {
       this.movers = this.movers.filter((m) => !finished.includes(m));
       finished.forEach((m) => m.done());
     }
+  }
+
+  private detourAroundPlayer(m: Mover): void {
+    const pos = m.p.root.position;
+    const [tx, tz] = m.path[0];
+    const px = this.player.x;
+    const pz = this.player.z;
+    const sx = tx - pos.x;
+    const sz = tz - pos.z;
+    const len = Math.hypot(sx, sz);
+    if (len < 0.3) return;
+    // closest point of this leg to the player
+    const k = THREE.MathUtils.clamp(((px - pos.x) * sx + (pz - pos.z) * sz) / (len * len), 0, 1);
+    const cx = pos.x + sx * k;
+    const cz = pos.z + sz * k;
+    const d = Math.hypot(cx - px, cz - pz);
+    if (d > 1.25 || k <= 0.02 || k >= 0.98) return;
+    // go round on the side the leg already passes, 1.35 m from the player
+    let nx = -sz / len;
+    let nz = sx / len;
+    if ((cx - px) * nx + (cz - pz) * nz < 0) {
+      nx = -nx;
+      nz = -nz;
+    }
+    const wx = THREE.MathUtils.clamp(px + nx * 1.35, ROOM.minX + 0.3, ROOM.maxX - 0.3);
+    const wz = THREE.MathUtils.clamp(pz + nz * 1.35, ROOM.minZ + 0.3, ROOM.maxZ - 0.3);
+    m.path.unshift([wx, wz]);
+    m.detoured = true;
   }
 
   everyoneLooksAt(x: number, z: number): void {
@@ -992,8 +1024,8 @@ export class Game {
   private faceV = new THREE.Vector3();
   private camV = new THREE.Vector3();
   faceMinAt = '';
-  /** Personal space: standing or crouched, the camera stays ~1 m from these two faces. */
-  private keepFaceDistance(): void {
+  /** Personal space: you can't step closer than ~1 m to these two faces (they never shove you). */
+  private keepFaceDistance(prevX: number, prevZ: number): void {
     if (this.player.stance === 'seated') return;
     const w = this.world;
     for (const p of [w.teacher, w.theo]) {
@@ -1005,10 +1037,16 @@ export class Game {
       const dx = this.player.x - this.faceV.x;
       const dz = this.player.z - this.faceV.z;
       const d = Math.hypot(dx, dz);
-      if (d < need) {
-        const k = d > 1e-4 ? need / d : 1;
-        this.player.x = this.faceV.x + (d > 1e-4 ? dx * k : need);
-        this.player.z = this.faceV.z + (d > 1e-4 ? dz * k : 0);
+      if (d >= need) continue;
+      const before = Math.hypot(prevX - this.faceV.x, prevZ - this.faceV.z);
+      if (before >= need && d > 1e-4) {
+        // stop on the edge of the circle (sliding round it is still allowed)
+        this.player.x = this.faceV.x + (dx / d) * need;
+        this.player.z = this.faceV.z + (dz / d) * need;
+      } else if (d < before) {
+        // already inside (they came to you): you may only move away
+        this.player.x = prevX;
+        this.player.z = prevZ;
       }
     }
   }
@@ -1362,8 +1400,10 @@ export class Game {
     const mv = blocked ? { x: 0, y: 0 } : this.input.moveVector();
     if (this.player.stance === 'seated' && this.player.canMove && (mv.x || mv.y)) this.leaveSeat('stand');
     const hurry = this.input.hurry && this.player.canMove && (mv.x !== 0 || mv.y !== 0);
+    const prevX = this.player.x;
+    const prevZ = this.player.z;
     this.player.update(dt, mv, this.world.colliders, hurry);
-    this.keepFaceDistance();
+    this.keepFaceDistance(prevX, prevZ);
 
     this.clock.tick(dt);
     this.tweens.update(dt);
@@ -1428,9 +1468,23 @@ export class Game {
         const d = Math.hypot(tx - t.x, tz - t.z);
         if (d > 0.05) {
           const step = Math.min(d, 1.6 * dt);
-          w.theo.faceTowards(tx, tz);
-          t.x += ((tx - t.x) / d) * step;
-          t.z += ((tz - t.z) / d) * step;
+          let ux = (tx - t.x) / d;
+          let uz = (tz - t.z) / d;
+          // never walk into Noah's face: inside 1.2 m, go round him instead of closer
+          const rx = t.x - p.x;
+          const rz = t.z - p.z;
+          const rd = Math.hypot(rx, rz);
+          if (rd < 1.2 && rd > 1e-3 && ux * rx + uz * rz < 0) {
+            const inward = (ux * rx + uz * rz) / rd;
+            ux -= (inward * rx) / rd;
+            uz -= (inward * rz) / rd;
+            const ul = Math.hypot(ux, uz) || 1;
+            ux /= ul;
+            uz /= ul;
+          }
+          w.theo.faceTowards(t.x + ux, t.z + uz);
+          t.x += ux * step;
+          t.z += uz * step;
           w.theo.walking = d > 0.2;
         } else w.theo.walking = false;
         if (inDoorWallZone(p.x, p.z) && Math.hypot(t.x - p.x, t.z - p.z) < 1.75) {

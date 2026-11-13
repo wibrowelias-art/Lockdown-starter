@@ -244,6 +244,7 @@ test('guidance: edge pointer angle, ringing ping, Minimal and Off modes', async 
     await page.evaluate((y) => window.__lockdown.setYaw(y), yaw + dy);
     await setSpeed(page, 0.25);
     await page.waitForTimeout(250);
+    await page.evaluate(() => new Promise((r) => { let n = 0; const f = () => (++n >= 3 ? r(0) : requestAnimationFrame(f)); requestAnimationFrame(f); }));
     await setSpeed(page, 0);
     return guidance(page);
   };
@@ -264,6 +265,7 @@ test('guidance: edge pointer angle, ringing ping, Minimal and Off modes', async 
   await page.evaluate(() => window.__lockdown.setGuidance('minimal'));
   await setSpeed(page, 0.25);
   await page.waitForTimeout(250);
+  await page.evaluate(() => new Promise((r) => { let n = 0; const f = () => (++n >= 3 ? r(0) : requestAnimationFrame(f)); requestAnimationFrame(f); }));
   let g = await guidance(page);
   expect(g.cardVisible).toBe(true);
   expect(g.highlight || g.pointerVisible || g.iconVisible || !!g.uiGlow).toBe(false);
@@ -271,6 +273,7 @@ test('guidance: edge pointer angle, ringing ping, Minimal and Off modes', async 
   // Off: nothing
   await page.evaluate(() => window.__lockdown.setGuidance('off'));
   await page.waitForTimeout(250);
+  await page.evaluate(() => new Promise((r) => { let n = 0; const f = () => (++n >= 3 ? r(0) : requestAnimationFrame(f)); requestAnimationFrame(f); }));
   g = await guidance(page);
   expect(g.cardVisible || g.highlight || g.pointerVisible || g.iconVisible || !!g.uiGlow).toBe(false);
   await expect(page.getByTestId('guide-card')).toBeHidden();
