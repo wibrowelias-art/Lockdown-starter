@@ -25,7 +25,8 @@ test('ending 1 - everyone went home: every task, all six phases', async ({ page 
   await expect(page.getByTestId('theo-help')).toBeVisible({ timeout: 60_000 });
   await setSpeed(page, 1);
   await page.getByTestId('theo-help').click({ timeout: 60_000 });
-  await setSpeed(page, 12);
+  // the aisle hold-still beat is timed: keep story time slow while clicking the sheet
+  await setSpeed(page, 4);
   for (let r = 0; r < 4; r++) await clickTarget(page, `bubble:${r}:${(r * 3 + 1) % 4}`);
   expect(await task(page, 'bubbles')).toBe(true);
   await page.evaluate(() => window.__lockdown.aim('zoeBackpack'));

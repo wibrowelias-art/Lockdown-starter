@@ -261,6 +261,8 @@ export class Person {
   tremble = 0;
   /** 0..1: the camera is too close to this face, so the head turns down/away */
   shy = 0;
+  /** which way to turn the face away (set from the side the camera is on) */
+  shyDir = 1;
   /** seconds of mouth movement left */
   talking = 0;
   private t = Math.random() * 10;
@@ -647,7 +649,7 @@ export class Person {
     this.elbowL.rotation.x = j.elbowL + 0.15 * this.gait;
     this.elbowR.rotation.x = j.elbowR + 0.15 * this.gait;
     const micro = Math.sin(this.t * 0.63) * 0.03 + Math.sin(this.t * 1.37 + 1) * 0.015;
-    this.head.rotation.y = this.headYawCur + j.twist * 0.5 + micro + this.shy * 1.0;
+    this.head.rotation.y = this.headYawCur + j.twist * 0.5 + micro + this.shy * this.shyDir;
     this.head.rotation.x = this.headPitchCur + j.lean * 0.4 - j.neck - this.shy * 0.5 + Math.sin(this.t * 0.91) * 0.015 + shake * 3;
     const lid = this.blinking > 0 ? -1.4 : this.lidOpen - this.shy * 0.5;
     for (const l of this.lids) l.rotation.x = lid;

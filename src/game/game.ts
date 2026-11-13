@@ -1065,6 +1065,7 @@ export class Game {
   private theoSide: [number, number] = [1.1, 0.85];
   faceBlocks = 0;
   private fwdV = new THREE.Vector3();
+  private localV = new THREE.Vector3();
   /** How much the body faces a point: 1 straight at it, <= 0 the point is behind them. */
   private facing(p: Person, x: number, y: number, z: number, head = false): number {
     // body facing by default (the head itself turns away when you come close); the "seen"
@@ -1139,6 +1140,12 @@ export class Game {
       }
       // closer than ~1.1 m in front of them, they turn their face away (fully by 1.1 m)
       const want = f > 0 ? THREE.MathUtils.clamp((1.5 - d) / 0.4, 0, 1) : 0;
+      // turn away from the camera's side (+yaw turns the face towards the body's local -x)
+      if (p.shy < 0.05) {
+        this.localV.copy(this.camV);
+        p.root.worldToLocal(this.localV);
+        p.shyDir = this.localV.x >= 0 ? 1 : -1;
+      }
       p.shy += (want - p.shy) * Math.min(1, dt * 8);
     }
   }
