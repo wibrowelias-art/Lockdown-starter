@@ -53,7 +53,7 @@ export async function boot(page: Page, speed = 14, opts: { lowq?: boolean } = {}
   });
   page.on('pageerror', (e) => run.errors.push(`pageerror: ${e.message}`));
   await page.goto(`/?speed=${speed}&nolock${opts.lowq ? '&lowq' : ''}`);
-  await expect(page.getByTestId('content-notice')).toBeVisible();
+  await expect(page.getByTestId('content-notice')).toBeVisible({ timeout: 120_000 });
   await expect(page.getByTestId('exit')).toBeVisible();
   return run;
 }
@@ -76,7 +76,11 @@ export async function shot(page: Page, name: string, dir = SHOTS, hq = true): Pr
   await page.waitForTimeout(250);
   const file = path.join(dir, `${name}.png`);
   await page.screenshot({ path: file, timeout: 180_000 });
-  if (hq) await page.evaluate(() => window.__lockdown.hq(false));
+  if (hq) {
+    await page.evaluate(() => window.__lockdown.hq(false));
+    // let the switch back to the play preset finish (shader recompiles) before the test goes on
+    await page.evaluate(() => new Promise((r) => { let n = 0; const f = () => (++n >= 3 ? r(0) : requestAnimationFrame(f)); requestAnimationFrame(f); }));
+  }
   await page.evaluate((s) => window.__lockdown.setSpeed(s), speed);
   return file;
 }

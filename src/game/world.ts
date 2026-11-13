@@ -89,7 +89,7 @@ export const HUDDLE: Record<string, [number, number, number]> = {
   jo: [-0.3, -4.0, 0],
   malik: [3.55, -4.0, -0.05],
   sam: [4.1, -3.95, -0.1],
-  theo: [3.75, -3.4, -0.3],
+  theo: [-0.75, -3.5, 0.3],
 };
 export const NOAH_WALL_SPOT = { x: 0.4, z: -3.1 };
 
