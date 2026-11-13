@@ -1672,12 +1672,24 @@ export class Game {
     const nx = Math.round((ROOM.maxX - ROOM.minX) / cell);
     const nz = Math.round((ROOM.maxZ - ROOM.minZ) / cell);
     const r = this.player.radius + 0.04;
+    // personal space in front of the two faces counts as an obstacle (see keepFaceDistance)
+    const faces: { x: number; z: number; r: number; p: Person }[] = [];
+    for (const p of [this.world.teacher, this.world.theo]) {
+      if (!p.root.visible || (p === this.world.theo && this.flags.theoFollowing)) continue;
+      p.head.getWorldPosition(this.faceV);
+      faces.push({ x: this.faceV.x, z: this.faceV.z, r: 1.12, p });
+    }
     const free = (i: number, j: number) => {
       if (i < 0 || j < 0 || i >= nx || j >= nz) return false;
       const px = ROOM.minX + (i + 0.5) * cell;
       const pz = ROOM.minZ + (j + 0.5) * cell;
       if (px < ROOM.minX + r || px > ROOM.maxX - r || pz < ROOM.minZ + r || pz > ROOM.maxZ - r) return false;
       for (const c of this.world.colliders) if (px > c.minX - r && px < c.maxX + r && pz > c.minZ - r && pz < c.maxZ + r) return false;
+      for (const f of faces) {
+        if (Math.hypot(px - f.x, pz - f.z) >= f.r) continue;
+        this.faceV.set(f.x, this.player.eye, f.z);
+        if (this.facing(f.p, px, this.player.eye, pz) >= 0) return false;
+      }
       return true;
     };
     const toCell = (px: number, pz: number): [number, number] => [Math.floor((px - ROOM.minX) / cell), Math.floor((pz - ROOM.minZ) / cell)];

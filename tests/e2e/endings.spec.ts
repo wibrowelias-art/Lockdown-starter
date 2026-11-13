@@ -20,7 +20,11 @@ test('ending 1 - everyone went home: every task, all six phases', async ({ page 
   // 1 exam
   await expect(page.getByTestId('titlecard')).toHaveClass(/in/);
   await shot(page, '02-exam');
+  // a timed choice: slow the story down so the click lands inside its window
+  await expect(page.getByTestId('theo-help')).toBeVisible({ timeout: 60_000 });
+  await setSpeed(page, 1);
   await page.getByTestId('theo-help').click({ timeout: 60_000 });
+  await setSpeed(page, 12);
   for (let r = 0; r < 4; r++) await clickTarget(page, `bubble:${r}:${(r * 3 + 1) % 4}`);
   expect(await task(page, 'bubbles')).toBe(true);
   await page.evaluate(() => window.__lockdown.aim('zoeBackpack'));
