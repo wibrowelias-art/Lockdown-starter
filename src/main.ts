@@ -58,7 +58,16 @@ async function start(): Promise<void> {
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
   const game = new Game(canvas, app, speed, { noLock: params.has('nolock'), preset: forced ?? undefined, lib });
   load.remove();
-  // Hooks for automated playthroughs (Playwright) and debugging.
+  // Hooks for automated playthroughs (Playwright) and debugging. The game itself never reads
+  // them, so a page without them (or a browser that refuses the assignment) plays the same.
+  try {
+    installHooks(game);
+  } catch {
+    /* hooks are optional */
+  }
+}
+
+function installHooks(game: Game): void {
   (window as unknown as { __lockdown: unknown }).__lockdown = {
     state: () => JSON.parse(JSON.stringify(game.store.state)),
     scene: () => game.store.state.scene,

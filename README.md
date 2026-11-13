@@ -28,6 +28,13 @@ URL options: `?speed=4` (story time 4x faster), `?preset=low|medium|high|ultra` 
 quality preset), `?lowq` (= `?preset=low`), `?nolock` (no pointer lock: drag to look, click to
 use; used by the automated tests). **F3** shows an FPS / frame-time / draw-call counter.
 
+## Deploy (Vercel Drop)
+
+`release/room214-vercel-static.zip` is the finished build (index.html and assets/ at the zip
+root, relative paths, no CDN): drag it onto https://vercel.com/drop. `release/HOW-TO-DEPLOY.md`
+has the steps and the usual 404 fixes. `release/room214-vercel-source.zip` is the source with
+`vercel.json` if you want Vercel to build it (`npm run build`, output `dist`).
+
 ## Controls
 
 | | Keyboard / mouse (pointer lock) | Touch |
