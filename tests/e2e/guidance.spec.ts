@@ -149,7 +149,7 @@ test('guidance leads the player through all 24 tasks', async ({ page }) => {
         break;
       case 'theoDown':
         if (target === 'theo') {
-          await page.evaluate(() => window.__lockdown.navToTarget('theo', 1.0));
+          await page.evaluate(() => window.__lockdown.navToTarget('theo', 1.5));
           await clickUntil(page, 'theo', () => page.evaluate(() => window.__lockdown.theoFollowing()));
         } else await page.evaluate(() => window.__lockdown.navTo(0.4, -3.1, 0.12));
         break;

@@ -1051,12 +1051,9 @@ export class Game {
       const d = Math.hypot(dx, dz);
       if (d >= need) continue;
       const before = Math.hypot(prevX - this.faceV.x, prevZ - this.faceV.z);
-      if (before >= need && d > 1e-4) {
-        // stop on the edge of the circle (sliding round it is still allowed)
-        this.player.x = this.faceV.x + (dx / d) * need;
-        this.player.z = this.faceV.z + (dz / d) * need;
-      } else if (d < before) {
-        // already inside (they came to you): you may only move away
+      // stepping in from outside stops you (like bumping into someone); already inside
+      // (they came to you) you may only move away
+      if (before >= need || d < before) {
         this.player.x = prevX;
         this.player.z = prevZ;
       }
@@ -1477,8 +1474,8 @@ export class Game {
       // Theo follows you, crouched
       if (this.flags.theoFollowing && !st.tasks.theoDown) {
         const t = w.theo.root.position;
-        const tx = p.x + 1.1;
-        const tz = p.z + 0.85;
+        const tx = THREE.MathUtils.clamp(p.x + 1.1, ROOM.minX + 0.4, ROOM.maxX - 0.4);
+        const tz = THREE.MathUtils.clamp(p.z + 0.85, ROOM.minZ + 0.4, ROOM.maxZ - 0.4);
         const d = Math.hypot(tx - t.x, tz - t.z);
         if (d > 0.05) {
           const step = Math.min(d, 1.6 * dt);
