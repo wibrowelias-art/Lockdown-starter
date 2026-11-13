@@ -62,7 +62,8 @@ test('ending 1 - everyone went home: every task, all six phases', async ({ page 
   await clickUntil(page, 'pack:malik', () => task(page, 'ringingPhone'));
   await walk(page, [[-3.9, -0.85], [-3.9, 0.4]]);
   await clickUntil(page, 'blinds', () => task(page, 'blinds'));
-  await walk(page, [[-3.9, -2.75], [1.5, -2.75], [2.1, -3.6]]);
+  // to the door from straight in front (Ms. Okafor crouches on its left)
+  await walk(page, [[-3.9, -2.75], [1.5, -2.75], [2.75, -2.9], [2.75, -3.45]]);
   await clickUntil(page, 'doorWindow', () => task(page, 'coverWindow'));
   await walk(page, [[3.0, -3.35], [3.95, -3.4]]);
   await page.keyboard.down('e');

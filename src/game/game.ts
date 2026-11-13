@@ -42,6 +42,8 @@ interface Mover {
   done: () => void;
   /** already stepped around the player once on this walk */
   detoured?: boolean;
+  /** seconds paused so far to keep a face out of the camera's 1 m */
+  waited?: number;
 }
 
 const FOUND_KEY = 'room214.endings';
@@ -100,6 +102,9 @@ const PHASE_TASKS: Partial<Record<SceneId, TaskId[]>> = {
   waiting: ['holdStill', 'breatheTheo', 'schoolAlert', 'whisper', 'stayDown'],
   door: ['readTiming', 'decide'],
 };
+
+/** cos(60 deg): the cone in front of a face in which it counts as seen. */
+const FACE_CONE = 0.5;
 
 /** Screen centre (crosshair), shared to avoid per-frame allocations. */
 const CENTER = new THREE.Vector2(0, 0);
@@ -585,7 +590,14 @@ export class Game {
       const pos = m.p.root.position;
       let budget = m.speed * dt;
       // Ms. Okafor and Theo step around the player instead of walking into the camera
-      if (!m.detoured && m.path.length && (m.p === this.world.teacher || m.p === this.world.theo)) this.detourAroundPlayer(m);
+      const face = m.p === this.world.teacher || m.p === this.world.theo;
+      if (!m.detoured && m.path.length && face) this.detourAroundPlayer(m);
+      // and pause (up to 2 s) rather than bring the face inside 1 m in front of the camera
+      if (face && m.path.length && (m.waited ?? 0) < 2 && this.faceStepTooClose(m, budget)) {
+        m.waited = (m.waited ?? 0) + dt;
+        m.p.walking = false;
+        continue;
+      }
       while (budget > 0 && m.path.length) {
         const [tx, tz] = m.path[0];
         const dx = tx - pos.x;
@@ -610,6 +622,22 @@ export class Game {
       this.movers = this.movers.filter((m) => !finished.includes(m));
       finished.forEach((m) => m.done());
     }
+  }
+
+  private faceStepTooClose(m: Mover, budget: number): boolean {
+    const pos = m.p.root.position;
+    const [tx, tz] = m.path[0];
+    const d = Math.hypot(tx - pos.x, tz - pos.z);
+    if (d < 1e-3) return false;
+    const k = Math.min(budget, d) / d;
+    m.p.head.getWorldPosition(this.faceV);
+    this.faceV.y += 0.1 * m.p.root.scale.y;
+    this.camera.getWorldPosition(this.camV);
+    const now = this.faceV.distanceTo(this.camV);
+    this.faceV.x += (tx - pos.x) * k;
+    this.faceV.z += (tz - pos.z) * k;
+    const next = this.faceV.distanceTo(this.camV);
+    return next < 1.04 && next < now && this.facing(m.p, this.camV.x, this.camV.y, this.camV.z) > FACE_CONE;
   }
 
   private detourAroundPlayer(m: Mover): void {
@@ -852,6 +880,7 @@ export class Game {
     if (!pack) return;
     pack.ringing = true;
     this.flags.ringing = id;
+    this.ringStart = this.clock.time;
     const p = pack.mesh.position;
     this.audio.ringtone({ x: p.x, y: 0.3, z: p.z });
     this.ui.caption("[a phone starts ringing. Someone's backpack.]", 3);
@@ -1024,6 +1053,8 @@ export class Game {
   private faceV = new THREE.Vector3();
   private camV = new THREE.Vector3();
   faceMinAt = '';
+  /** sim time the backpack phone started ringing (guidance waits 6 s of ringing before a marker) */
+  ringStart = 0;
   faceBlocks = 0;
   private fwdV = new THREE.Vector3();
   /** How much the body faces a point: 1 straight at it, <= 0 the point is behind them. */
@@ -1046,7 +1077,7 @@ export class Game {
       if (p === w.theo && this.flags.theoFollowing) continue;
       p.head.getWorldPosition(this.faceV);
       this.faceV.y += 0.1 * p.root.scale.y;
-      if (this.facing(p, this.player.x, this.player.eye, this.player.z) < 0) continue;
+      if (this.facing(p, this.player.x, this.player.eye, this.player.z) < FACE_CONE) continue;
       const dy = this.player.eye - this.faceV.y;
       const need = Math.sqrt(Math.max(0, 1.04 * 1.04 - dy * dy));
       const dx = this.player.x - this.faceV.x;
@@ -1089,13 +1120,15 @@ export class Game {
       p.head.getWorldPosition(this.faceV);
       this.faceV.y += 0.1 * p.root.scale.y;
       const d = this.faceV.distanceTo(this.camV);
-      // only a face you are in front of counts as seen (behind/beside it you see hair and shoulders)
-      const front = this.facing(p, this.camV.x, this.camV.y, this.camV.z) > 0;
+      // a face counts as seen only within ~60 degrees of where it looks (beside or behind it you
+      // see a profile, hair and shoulders)
+      const f = this.facing(p, this.camV.x, this.camV.y, this.camV.z);
+      const front = f > FACE_CONE;
       if (playing && front && d < this.faceMin) {
         this.faceMin = d;
         this.faceMinAt = `${p.name} ${sc} player(${this.player.x.toFixed(2)},${this.player.z.toFixed(2)},${this.player.stance}) face(${this.faceV.x.toFixed(2)},${this.faceV.y.toFixed(2)},${this.faceV.z.toFixed(2)})`;
       }
-      const want = front ? THREE.MathUtils.clamp((1.2 - d) / 0.3, 0, 1) : 0;
+      const want = f > 0 ? THREE.MathUtils.clamp((1.2 - d) / 0.3, 0, 1) : 0;
       p.shy += (want - p.shy) * Math.min(1, dt * 6);
     }
   }
@@ -1688,7 +1721,7 @@ export class Game {
       for (const f of faces) {
         if (Math.hypot(px - f.x, pz - f.z) >= f.r) continue;
         this.faceV.set(f.x, this.player.eye, f.z);
-        if (this.facing(f.p, px, this.player.eye, pz) >= 0) return false;
+        if (this.facing(f.p, px, this.player.eye, pz) >= FACE_CONE) return false;
       }
       return true;
     };

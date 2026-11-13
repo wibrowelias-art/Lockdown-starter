@@ -298,7 +298,9 @@ export class Guidance {
       this.whispered.add(c.task + c.id);
       g.say(c.whisper.who, c.whisper.text, { whisper: true });
     }
-    const delayed = !!c?.delay && this.shown < c.delay;
+    // the ringing phone: no marker for the first 6 s of ringing (counted from the first ring,
+    // not from when it became the current task)
+    const delayed = !!c?.delay && (c.task === 'ringingPhone' ? g.clock.time - g.ringStart : this.shown) < c.delay;
     const full = this.mode === 'full' && !!c && !delayed && !s.markersHidden;
 
     // card (full + minimal)
