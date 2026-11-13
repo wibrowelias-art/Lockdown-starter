@@ -1061,6 +1061,8 @@ export class Game {
   faceMinAt = '';
   /** sim time the backpack phone started ringing (guidance waits 6 s of ringing before a marker) */
   ringStart = 0;
+  /** Theo's follow offset from Noah (a diagonal away from the walls) */
+  private theoSide: [number, number] = [1.1, 0.85];
   faceBlocks = 0;
   private fwdV = new THREE.Vector3();
   /** How much the body faces a point: 1 straight at it, <= 0 the point is behind them. */
@@ -1548,8 +1550,23 @@ export class Game {
       // Theo follows you, crouched
       if (this.flags.theoFollowing && !st.tasks.theoDown) {
         const t = w.theo.root.position;
-        const tx = THREE.MathUtils.clamp(p.x + 1.1, ROOM.minX + 0.4, ROOM.maxX - 0.4);
-        const tz = THREE.MathUtils.clamp(p.z + 0.85, ROOM.minZ + 0.4, ROOM.maxZ - 0.4);
+        // follow on a diagonal that keeps him off the walls (keep the current side if it's fine)
+        const room = (x: number, z: number) => Math.min(x - ROOM.minX, ROOM.maxX - x, z - ROOM.minZ, ROOM.maxZ - z);
+        const [ox, oz] = this.theoSide;
+        if (room(p.x + ox, p.z + oz) < 0.5) {
+          let best = this.theoSide;
+          let bestRoom = -Infinity;
+          for (const c of [[1.1, 0.85], [-1.1, 0.85], [1.1, -0.85], [-1.1, -0.85]] as [number, number][]) {
+            const r = room(p.x + c[0], p.z + c[1]);
+            if (r > bestRoom) {
+              bestRoom = r;
+              best = c;
+            }
+          }
+          this.theoSide = best;
+        }
+        const tx = THREE.MathUtils.clamp(p.x + this.theoSide[0], ROOM.minX + 0.4, ROOM.maxX - 0.4);
+        const tz = THREE.MathUtils.clamp(p.z + this.theoSide[1], ROOM.minZ + 0.4, ROOM.maxZ - 0.4);
         const d = Math.hypot(tx - t.x, tz - t.z);
         if (d > 0.05) {
           const step = Math.min(d, 1.6 * dt);
@@ -1580,8 +1597,17 @@ export class Game {
         const backing = bd < 1.2 && bd > 1e-3;
         if (backing) {
           const back = Math.min(1.2 - bd, 2.2 * dt);
-          t.x = THREE.MathUtils.clamp(t.x + (bx / bd) * back, ROOM.minX + 0.3, ROOM.maxX - 0.3);
-          t.z = THREE.MathUtils.clamp(t.z + (bz / bd) * back, ROOM.minZ + 0.3, ROOM.maxZ - 0.3);
+          let nx = t.x + (bx / bd) * back;
+          let nz = t.z + (bz / bd) * back;
+          // a wall behind him: slide sideways along it instead
+          if (nx < ROOM.minX + 0.3 || nx > ROOM.maxX - 0.3) nx = t.x;
+          if (nz < ROOM.minZ + 0.3 || nz > ROOM.maxZ - 0.3) nz = t.z;
+          if (nx === t.x && nz === t.z) {
+            nx = THREE.MathUtils.clamp(t.x - (bz / bd) * back * 2, ROOM.minX + 0.3, ROOM.maxX - 0.3);
+            nz = THREE.MathUtils.clamp(t.z + (bx / bd) * back * 2, ROOM.minZ + 0.3, ROOM.maxZ - 0.3);
+          }
+          t.x = nx;
+          t.z = nz;
         }
         w.theo.walking = backing || d > 0.2;
         if (inDoorWallZone(p.x, p.z) && Math.hypot(t.x - p.x, t.z - p.z) < 1.75) {
@@ -1718,7 +1744,8 @@ export class Game {
     // personal space in front of the two faces counts as an obstacle (see keepFaceDistance)
     const faces: { x: number; z: number; r: number; p: Person }[] = [];
     for (const p of [this.world.teacher, this.world.theo]) {
-      if (!p.root.visible || (p === this.world.theo && this.flags.theoFollowing)) continue;
+      // only faces standing still: a walking teacher steps round you herself
+      if (!p.root.visible || (p === this.world.theo && this.flags.theoFollowing) || this.movers.some((m) => m.p === p)) continue;
       p.head.getWorldPosition(this.faceV);
       faces.push({ x: this.faceV.x, z: this.faceV.z, r: 1.12, p });
     }

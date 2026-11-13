@@ -83,10 +83,10 @@ const SEATS: Record<string, [number, number]> = {
 
 /** Lockdown spots along the door wall, either side of the door, out of the window's sight line. */
 export const HUDDLE: Record<string, [number, number, number]> = {
-  teacher: [1.2, -4.15, 0],
-  ines: [0.72, -4.08, 0.1],
-  hana: [0.3, -4.05, 0.05],
-  jo: [-0.3, -4.0, 0],
+  teacher: [0.95, -4.3, 0],
+  ines: [0.55, -4.05, 0.1],
+  hana: [0.12, -4.05, 0.05],
+  jo: [-0.32, -3.98, 0],
   malik: [3.55, -4.0, -0.05],
   sam: [4.1, -3.95, -0.1],
   theo: [-0.75, -3.5, 0.3],

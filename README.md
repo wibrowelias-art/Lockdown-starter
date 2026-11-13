@@ -91,8 +91,10 @@ browser allows:
   student work); dust motes, haze, scuffs.
 - **People:** a clean semi-real build (no downloaded rigs): jointed limbs, knit / fleece /
   denim fabric, skin with pores and sheen (not waxy), hair with strand normals, wet eyes that
-  blink. Only Ms. Okafor and Theo have open, readable faces, and they are never seen closer
-  than ~1 m (they look down as you come close, and you can't walk into them); the other
+  blink. Only Ms. Okafor and Theo have open, readable faces, and a face is never seen from the
+  front (within 60 degrees of where it looks) closer than 1 m: you can't step into their space,
+  they step round you, and closer than ~1.1 m they turn their face away (the guidance bot
+  measures this over a whole playthrough: closest frontal face 1.01 m); the other
   students keep their eyes down and are mostly seen from behind. Breathing, micro head
   motion, trembling, smooth crouch/stand, walk cycles driven by distance (no foot sliding).
 - **UI:** Inter, white subtitles with a soft shadow and a small coloured speaker tag, a
