@@ -73,6 +73,9 @@ async function start(): Promise<void> {
     lightsOn: () => game.world.lightsOn,
     faceMin: () => game.faceMin,
     faceMinAt: () => game.faceMinAt,
+    pickDebug: (x: number, y: number) => game.pickDebug(x, y),
+    flags: () => ({ ...game.flags }),
+    faceBlocks: () => game.faceBlocks,
     /** debug: which interactable a click at (x, y) would use */
     pickAt: (x: number, y: number) => {
       const t = game.pick(x, y);

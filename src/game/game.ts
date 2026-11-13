@@ -1024,6 +1024,7 @@ export class Game {
   private faceV = new THREE.Vector3();
   private camV = new THREE.Vector3();
   faceMinAt = '';
+  faceBlocks = 0;
   private fwdV = new THREE.Vector3();
   /** How much the body faces a point: 1 straight at it, <= 0 the point is behind them. */
   private facing(p: Person, x: number, y: number, z: number): number {
@@ -1051,11 +1052,28 @@ export class Game {
       const d = Math.hypot(dx, dz);
       if (d >= need) continue;
       const before = Math.hypot(prevX - this.faceV.x, prevZ - this.faceV.z);
-      // stepping in from outside stops you (like bumping into someone); already inside
-      // (they came to you) you may only move away
-      if (before >= need || d < before) {
+      if (before >= need) {
+        // stepping in from outside: stop where the step meets the circle (like bumping into
+        // someone); a scripted walk ends there
+        const mx = this.player.x - prevX;
+        const mz = this.player.z - prevZ;
+        const fx = prevX - this.faceV.x;
+        const fz = prevZ - this.faceV.z;
+        const a = mx * mx + mz * mz;
+        const b = 2 * (fx * mx + fz * mz);
+        const c = fx * fx + fz * fz - need * need;
+        const disc = b * b - 4 * a * c;
+        const t = a > 1e-9 && disc >= 0 ? THREE.MathUtils.clamp((-b - Math.sqrt(disc)) / (2 * a), 0, 1) * 0.98 : 0;
+        this.player.x = prevX + mx * t;
+        this.player.z = prevZ + mz * t;
+        this.player.autoTarget = null;
+        this.faceBlocks++;
+      } else if (d < before) {
+        // already inside (they came to you): you may only move away
         this.player.x = prevX;
         this.player.z = prevZ;
+        this.player.autoTarget = null;
+        this.faceBlocks++;
       }
     }
   }
@@ -1312,6 +1330,19 @@ export class Game {
       if (h && h.distance <= it.range && (!best || h.distance < best.hit.distance)) best = { it, hit: h };
     }
     return best;
+  }
+
+  /** debug: every enabled interactable and where a ray at (x, y) hits it */
+  pickDebug(clientX: number, clientY: number): string[] {
+    const r = this.canvas.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    this.raycaster.setFromCamera(ndc, this.camera);
+    this.raycaster.layers.set(0);
+    return this.interactables.filter((it) => it.enabled()).map((it) => {
+      const objs = it.objects();
+      const h = this.raycaster.intersectObjects(objs, true)[0];
+      return `${it.id}:${objs.length}obj:${h ? h.distance.toFixed(2) + '@' + (h.object.name || h.object.type) : 'miss'}`;
+    });
   }
 
   private centerPick() {
